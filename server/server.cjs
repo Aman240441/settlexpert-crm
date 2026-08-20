@@ -11,7 +11,11 @@ const PORT = process.env.PORT || 5000;
 const JWT_SECRET = process.env.JWT_SECRET || 'reduced-debts-secret-key-2026';
 const AADHAAR_SECRET_KEY = crypto.createHash('sha256').update(String(process.env.AADHAAR_SECRET || 'settlexpert-aadhaar-vault-key-2026')).digest();
 
-app.use(cors());
+app.use(cors({
+  origin: '*',
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
@@ -3311,7 +3315,7 @@ app.use((err, req, res, next) => {
 });
 
 // Start Server
-app.listen(PORT, async () => {
+app.listen(PORT, '0.0.0.0', async () => {
   await getDb();
-  console.log(`SettleXpert CRM Backend running on http://localhost:${PORT}`);
+  console.log(`SettleXpert CRM Backend running on http://0.0.0.0:${PORT}`);
 });
