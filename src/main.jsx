@@ -4,14 +4,18 @@ import App from './App';
 import './index.css';
 import './admin.css';
 
-// Global fetch interceptor to attach JWT token and route to VITE_API_URL if configured
-const API_BASE = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '');
+// Global fetch interceptor to attach JWT token and route to live API if in native app or configured
+const DEFAULT_PROD_API = 'https://settlexpertcrm-api.onrender.com';
+const isNative = typeof window !== 'undefined' && (window.location.protocol === 'capacitor:' || window.location.protocol === 'ionic:' || window.Capacitor?.isNativePlatform());
+const API_BASE = (import.meta.env.VITE_API_URL || (isNative ? DEFAULT_PROD_API : '')).replace(/\/$/, '');
 const originalFetch = window.fetch;
 window.fetch = async (url, options = {}) => {
   let targetUrl = url;
   if (typeof url === 'string' && url.startsWith('/api/')) {
     if (API_BASE) {
       targetUrl = `${API_BASE}${url}`;
+    } else if (isNative) {
+      targetUrl = `${DEFAULT_PROD_API}${url}`;
     }
     const token = localStorage.getItem('crm_token');
     if (token && !url.startsWith('/api/auth/login')) {

@@ -74,6 +74,43 @@ export default function App() {
     setTimeout(() => setToast(null), 3500);
   };
 
+  // Capacitor Android Hardware Back Button Support
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.Capacitor?.Plugins?.App) {
+      const AppPlugin = window.Capacitor.Plugins.App;
+      const listener = AppPlugin.addListener('backButton', ({ canGoBack }) => {
+        if (leadModal.isOpen) {
+          setLeadModal({ isOpen: false, lead: null, isViewOnly: false });
+        } else if (clientModal.isOpen) {
+          setClientModal({ isOpen: false, client: null, isViewOnly: false });
+        } else if (agreementModal.isOpen) {
+          setAgreementModal({ isOpen: false, agreement: null, isViewOnly: false });
+        } else if (agreementPreviewModal.isOpen) {
+          setAgreementPreviewModal({ isOpen: false, agreement: null });
+        } else if (recordPaymentModal.isOpen) {
+          setRecordPaymentModal({ isOpen: false, client: null });
+        } else if (convertLeadModal.isOpen) {
+          setConvertLeadModal({ isOpen: false, lead: null });
+        } else if (followUpModal.isOpen) {
+          setFollowUpModal({ isOpen: false, lead: null });
+        } else if (bulkMailModal.isOpen) {
+          setBulkMailModal({ isOpen: false, selectedClients: [] });
+        } else if (adminViewEmployee) {
+          setAdminViewEmployee(null);
+        } else if (currentPage !== 'dashboard') {
+          setCurrentPage('dashboard');
+        } else {
+          AppPlugin.exitApp();
+        }
+      });
+      return () => {
+        if (listener && typeof listener.then === 'function') {
+          listener.then(h => h.remove());
+        }
+      };
+    }
+  }, [leadModal, clientModal, agreementModal, agreementPreviewModal, recordPaymentModal, convertLeadModal, followUpModal, bulkMailModal, adminViewEmployee, currentPage]);
+
   const handleLogout = () => {
     localStorage.removeItem('crm_token');
     localStorage.removeItem('crm_user');
