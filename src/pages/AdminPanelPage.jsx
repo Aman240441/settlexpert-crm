@@ -24,6 +24,7 @@ const authHeaders = () => ({
 
 export default function AdminPanelPage({ user, onLogout, onViewEmployee, onOpenCRM }) {
   const [currentPage, setCurrentPage] = useState('dashboard');
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [dashData, setDashData] = useState(null);
   const [employees, setEmployees] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -1480,10 +1481,20 @@ export default function AdminPanelPage({ user, onLogout, onViewEmployee, onOpenC
 
   return (
     <div className="admin-layout">
-      <AdminSidebar currentPage={currentPage} setCurrentPage={setCurrentPage} onLogout={onLogout} />
+      <AdminSidebar
+        currentPage={currentPage}
+        setCurrentPage={setCurrentPage}
+        onLogout={onLogout}
+        isMobileOpen={isMobileSidebarOpen}
+        setIsMobileOpen={setIsMobileSidebarOpen}
+      />
 
       <div className="admin-main">
-        <AdminHeader user={user} onLogout={onLogout} />
+        <AdminHeader
+          user={user}
+          onLogout={onLogout}
+          onToggleMobileSidebar={() => setIsMobileSidebarOpen(prev => !prev)}
+        />
 
         <div className="admin-content-area">
           {currentPage === 'dashboard' && renderDashboard()}

@@ -1,13 +1,22 @@
 import React, { useState } from 'react';
-import { LogOut, Shield, Bell } from 'lucide-react';
+import { LogOut, Shield, Bell, Menu } from 'lucide-react';
 
-export default function AdminHeader({ user, onLogout }) {
+export default function AdminHeader({ user, onLogout, onToggleMobileSidebar }) {
   const [showDropdown, setShowDropdown] = useState(false);
   const [logoError, setLogoError] = useState(false);
 
   return (
     <header className="admin-header">
       <div className="admin-header-left">
+        <button
+          type="button"
+          className="admin-mobile-menu-btn"
+          onClick={onToggleMobileSidebar}
+          title="Open Navigation Menu"
+          aria-label="Open Navigation Menu"
+        >
+          <Menu size={20} />
+        </button>
         <h2 className="admin-header-title">Admin Management Console</h2>
       </div>
 
