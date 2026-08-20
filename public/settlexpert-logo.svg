@@ -1,0 +1,12 @@
+<svg viewBox="0 0 260 70" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <text x="4" y="48" fill="#008037" font-family="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="40" font-weight="700" letter-spacing="-0.5px">
+    Settle
+  </text>
+  <g transform="translate(118, 5)">
+    <circle cx="28" cy="12" r="7" fill="#111827" />
+    <path d="M 12 28 C 22 26, 34 26, 44 20 C 42 28, 36 34, 30 38 C 34 46, 42 54, 46 58 C 38 56, 32 50, 26 42 C 20 52, 14 58, 8 62 C 16 54, 22 46, 26 38 C 22 35, 16 31, 12 28 Z" fill="#00A84D" />
+  </g>
+  <text x="166" y="48" fill="#111827" font-family="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="40" font-weight="700" letter-spacing="-0.5px">
+    pert
+  </text>
+</svg>
