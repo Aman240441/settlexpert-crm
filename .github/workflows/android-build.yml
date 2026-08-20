@@ -55,6 +55,28 @@ jobs:
           npx cap add android || true
           npx cap sync android
 
+      - name: Configure Android App Icon from Favicon.png
+        run: |
+          node -e "
+          const fs = require('fs');
+          const path = require('path');
+          const iconSrc = path.join(process.cwd(), 'img', 'Favicon.png');
+          const resDir = path.join(process.cwd(), 'android', 'app', 'src', 'main', 'res');
+          if (fs.existsSync(resDir)) {
+            const dirs = fs.readdirSync(resDir).filter(d => d.startsWith('mipmap') || d.startsWith('drawable'));
+            for (const dir of dirs) {
+              const targetDir = path.join(resDir, dir);
+              ['ic_launcher.png', 'ic_launcher_round.png', 'ic_launcher_foreground.png', 'splash.png'].forEach(file => {
+                const targetFile = path.join(targetDir, file);
+                if (fs.existsSync(targetFile)) {
+                  fs.copyFileSync(iconSrc, targetFile);
+                }
+              });
+            }
+          }
+          console.log('App icons updated from Favicon.png');
+          "
+
       - name: Configure Android Permissions & Cleartext Traffic
         run: |
           # Add Internet permission and cleartext traffic to AndroidManifest.xml if not present
