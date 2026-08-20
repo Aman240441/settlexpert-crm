@@ -68,6 +68,8 @@ function initSchema(database) {
       source TEXT DEFAULT 'Website',
       lead_status TEXT DEFAULT 'New',
       notes TEXT,
+      import_batch_id TEXT DEFAULT NULL,
+      imported_at DATETIME DEFAULT NULL,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
@@ -187,6 +189,7 @@ function initSchema(database) {
     );
 
     CREATE INDEX IF NOT EXISTS idx_employee_targets_emp_month ON employee_targets(employee_id, month);
+    CREATE INDEX IF NOT EXISTS idx_leads_import_batch_id ON leads(import_batch_id);
   `);
 }
 
@@ -234,6 +237,9 @@ function migrateSchema(database) {
   }
   if (!existingLeadCols.includes('imported_at')) {
     try { database.run("ALTER TABLE leads ADD COLUMN imported_at DATETIME DEFAULT NULL"); } catch (e) { }
+  }
+  if (!existingLeadCols.includes('import_batch_id')) {
+    try { database.run("ALTER TABLE leads ADD COLUMN import_batch_id TEXT DEFAULT NULL"); } catch (e) { }
   }
 
   // Migrate clients table for dob
@@ -308,6 +314,9 @@ function migrateSchema(database) {
   `);
   try {
     database.run("CREATE INDEX IF NOT EXISTS idx_employee_targets_emp_month ON employee_targets(employee_id, month)");
+  } catch (e) { }
+  try {
+    database.run("CREATE INDEX IF NOT EXISTS idx_leads_import_batch_id ON leads(import_batch_id)");
   } catch (e) { }
 
   // Migrate clients table for assigned_to
