@@ -203,7 +203,22 @@ export default function ImportLeadsModal({ isOpen, onClose, employees = [], onIm
       rawHeaders.forEach((header, colIdx) => {
         const fieldKey = columnMapping[header];
         if (fieldKey) {
-          rowObj[fieldKey] = row[colIdx] !== undefined ? String(row[colIdx]).trim() : '';
+          const rawVal = row[colIdx];
+          if (fieldKey === 'monthly_income') {
+            // Preserve native JS numbers from XLSX (numeric cells come as numbers already).
+            // For text cells formatted as "25,000" or "₹ 25,000", strip commas/currency/spaces
+            // so that parseFloat on the backend gets the correct value (e.g. 25000, not 25).
+            if (typeof rawVal === 'number') {
+              rowObj[fieldKey] = rawVal; // pass the number directly
+            } else if (rawVal !== undefined && rawVal !== null && String(rawVal).trim() !== '') {
+              // Strip ₹, commas, and whitespace; keep digits and decimal point
+              rowObj[fieldKey] = String(rawVal).replace(/[₹,\s]/g, '').trim();
+            } else {
+              rowObj[fieldKey] = '0';
+            }
+          } else {
+            rowObj[fieldKey] = rawVal !== undefined ? String(rawVal).trim() : '';
+          }
         }
       });
 

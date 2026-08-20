@@ -1963,6 +1963,20 @@ app.get('/api/admin/leads/:id/history', authenticateToken, requireAdmin, async (
 
 // ==================== EXCEL LEAD IMPORT ROUTES ====================
 
+/**
+ * Robustly parse a monthly_income value from Excel import.
+ * Handles: native JS numbers, Indian comma-formatted strings ("25,000", "1,50,000"),
+ * currency symbols ("₹25000"), and whitespace. Always returns a non-negative float.
+ */
+function parseMonthlyIncome(val) {
+  if (val === undefined || val === null || val === '') return 0;
+  if (typeof val === 'number') return isNaN(val) ? 0 : Math.max(0, val);
+  // Strip ₹, commas, spaces, and any non-numeric chars except the decimal point
+  const cleaned = String(val).replace(/[₹,\s]/g, '').trim();
+  const parsed = parseFloat(cleaned);
+  return isNaN(parsed) ? 0 : Math.max(0, parsed);
+}
+
 // Admin Import Leads with Multi-Distribution Modes (Single, Equal Round-Robin, Manual)
 app.post('/api/admin/leads/import', authenticateToken, requireAdmin, async (req, res) => {
   try {
@@ -2093,15 +2107,17 @@ app.post('/api/admin/leads/import', authenticateToken, requireAdmin, async (req,
 
         if (existingDup) {
           if (duplicate_action === 'update') {
+            const dupMonthlyIncome = parseMonthlyIncome(row.monthly_income);
             db.run(`
               UPDATE leads SET
                 assigned_to = ?,
                 assigned_consultant = ?,
                 import_batch_id = ?,
+                monthly_income = ?,
                 imported_at = datetime('now'),
                 updated_at = datetime('now')
               WHERE id = ?
-            `, [assignedId, assignedName, batchId, existingDup.id]);
+            `, [assignedId, assignedName, batchId, dupMonthlyIncome, existingDup.id]);
 
             // Assignment history
             db.run(`
@@ -2131,7 +2147,7 @@ app.post('/api/admin/leads/import', authenticateToken, requireAdmin, async (req,
         const lead_id = `LD-${Date.now().toString().slice(-4)}${rand3}${i}`;
         const loan_type = (row.loan_type || 'personal_loan_settlement').toString().toLowerCase().replace(/\s+/g, '_');
         const outstanding = (row.outstanding_amount || row.loan_amount || '1,00,000 - 3,00,000').toString();
-        const monthly_income = parseFloat(row.monthly_income) || 0;
+        const monthly_income = parseMonthlyIncome(row.monthly_income);
         const city = (row.city || 'India').toString();
         const notes = [
           row.lender ? `Lender: ${row.lender}` : '',
