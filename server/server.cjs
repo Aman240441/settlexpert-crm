@@ -3304,6 +3304,16 @@ app.all('/api/*', (req, res) => {
   res.status(404).json({ success: false, error: `API route not found: ${req.method} ${req.originalUrl}` });
 });
 
+// Serve frontend build (dist) if available
+const fs = require('fs');
+const distPath = path.join(__dirname, '../dist');
+if (fs.existsSync(distPath)) {
+  app.use(express.static(distPath));
+  app.get('*', (req, res) => {
+    res.sendFile(path.join(distPath, 'index.html'));
+  });
+}
+
 // Global Express error handler to guarantee JSON error response
 app.use((err, req, res, next) => {
   console.error('Express Server Error:', err);

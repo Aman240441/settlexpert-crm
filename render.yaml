@@ -3,7 +3,7 @@ services:
     name: settlexpertcrm-api
     env: node
     plan: free
-    buildCommand: npm install
+    buildCommand: npm install && npm run build
     startCommand: node server/server.cjs
     envVars:
       - key: PORT
