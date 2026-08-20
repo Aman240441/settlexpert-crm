@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "postinstall": "vite build",
     "preview": "vite preview",
     "start": "node server/server.cjs",
     "server": "node server/server.cjs",
