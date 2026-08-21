@@ -128,6 +128,32 @@ export default function AdminPanelPage({ user, onLogout, onViewEmployee, onOpenC
     setLoading(false);
   };
 
+  const handleDownloadBackup = async () => {
+    try {
+      showToast('Preparing full database snapshot...');
+      const token = localStorage.getItem('crm_token');
+      const res = await fetch('/api/admin/backup/export', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || 'Failed to export backup');
+      }
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `settlexpert_crm_backup_${new Date().toISOString().slice(0, 10)}.json`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+      showToast('Database backup downloaded successfully!');
+    } catch (err) {
+      showToast(err.message, 'error');
+    }
+  };
+
   const fetchAdminLeads = async () => {
     setLeadsLoading(true);
     try {
@@ -1036,96 +1062,6 @@ export default function AdminPanelPage({ user, onLogout, onViewEmployee, onOpenC
     );
   };
 
-  // ==================== AUDIT LOGS VIEW ====================
-  const renderAuditLogs = () => (
-    <div className="admin-page-content">
-      <div className="admin-page-header">
-        <div>
-          <h1>Admin Audit Trail</h1>
-          <p>Complete chronological audit log of all system actions and lead assignments</p>
-        </div>
-        <button className="admin-btn-secondary" onClick={() => fetchAuditLogs()}>
-          <RefreshCw size={14} /> <span>Refresh</span>
-        </button>
-      </div>
-
-      <div className="admin-section-card">
-        {/* Filters */}
-        <div className="admin-table-toolbar">
-          <div style={{ display: 'flex', gap: '10px', flex: 1 }}>
-            <div className="admin-search-box">
-              <Search size={15} />
-              <input
-                type="text"
-                placeholder="Search audit details, users..."
-                value={auditSearch}
-                onChange={e => setAuditSearch(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && fetchAuditLogs()}
-              />
-            </div>
-            <select
-              className="admin-select-filter"
-              value={auditAction}
-              onChange={e => { setAuditAction(e.target.value); setAuditPage(1); }}
-            >
-              <option value="ALL">All Actions</option>
-              <option value="LEAD_IMPORT">Lead Imports</option>
-              <option value="LEAD_ASSIGN">Lead Assignments</option>
-              <option value="LEAD_REASSIGN">Lead Reassignments</option>
-              <option value="LEAD_BULK_ASSIGN">Bulk Assignments</option>
-              <option value="CREATE_EMPLOYEE">Employee Creations</option>
-              <option value="UPDATE_EMPLOYEE_STATUS">Status Changes</option>
-              <option value="RESET_EMPLOYEE_PASSWORD">Password Resets</option>
-            </select>
-          </div>
-          <span style={{ fontSize: '12px', color: '#94a3b8' }}>
-            Total {auditPagination.total} audit events
-          </span>
-        </div>
-
-        {auditLogs.length === 0 ? (
-          <div className="admin-empty-state" style={{ padding: '30px' }}>
-            <ShieldCheck size={36} color="#475569" />
-            <p>{auditLoading ? 'Loading audit trail...' : 'No audit events found.'}</p>
-          </div>
-        ) : (
-          <div className="admin-table-wrapper">
-            <table className="admin-table">
-              <thead>
-                <tr>
-                  <th>Timestamp</th>
-                  <th>Action</th>
-                  <th>Performed By</th>
-                  <th>Entity</th>
-                  <th>Details</th>
-                </tr>
-              </thead>
-              <tbody>
-                {auditLogs.map(log => (
-                  <tr key={log.id}>
-                    <td style={{ fontSize: '11px', color: '#94a3b8', whiteSpace: 'nowrap' }}>
-                      {log.created_at ? new Date(log.created_at).toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—'}
-                    </td>
-                    <td>
-                      <span className="admin-badge-id" style={{ fontSize: '10.5px' }}>
-                        {log.action}
-                      </span>
-                    </td>
-                    <td style={{ fontWeight: 600, color: '#e2e8f0' }}>{log.user_name || 'Admin'}</td>
-                    <td style={{ fontSize: '11px', color: '#818cf8', fontFamily: 'monospace' }}>
-                      {log.entity_type} {log.entity_id ? `(${log.entity_id})` : ''}
-                    </td>
-                    <td style={{ fontSize: '12px', color: '#cbd5e1' }}>{log.details}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-
   // ==================== EMPLOYEES VIEW ====================
   const renderEmployees = () => (
     <div className="admin-page-content">
@@ -1134,13 +1070,15 @@ export default function AdminPanelPage({ user, onLogout, onViewEmployee, onOpenC
           <h1>Employees</h1>
           <p>Manage employee profiles, credentials, Aadhaar documents, and CRM workspaces</p>
         </div>
-        <button
-          className="admin-btn-primary"
-          style={{ background: 'linear-gradient(135deg, #10b981, #059669)' }}
-          onClick={() => { setEditingEmployee(null); setShowCreateModal(true); }}
-        >
-          <UserPlus size={15} /> <span>Add Employee</span>
-        </button>
+        {user?.role === 'ADMIN' && (
+          <button
+            className="admin-btn-primary"
+            style={{ background: 'linear-gradient(135deg, #10b981, #059669)' }}
+            onClick={() => { setEditingEmployee(null); setShowCreateModal(true); }}
+          >
+            <UserPlus size={15} /> <span>Add Employee</span>
+          </button>
+        )}
       </div>
 
       <div className="admin-section-card">
@@ -1330,34 +1268,36 @@ export default function AdminPanelPage({ user, onLogout, onViewEmployee, onOpenC
                           <span>Profile</span>
                         </button>
 
-                        {/* More Actions Menu */}
-                        <div style={{ position: 'relative' }}>
-                          <button className="admin-action-btn" onClick={() => setActionMenu(actionMenu === emp.id ? null : emp.id)}>
-                            <MoreVertical size={16} />
-                          </button>
-                          {actionMenu === emp.id && (
-                            <div className="admin-action-menu" style={{ right: 0, zIndex: 60 }}>
-                              <button onClick={() => { setEditingEmployee(emp); setActionMenu(null); }}>
-                                <Edit3 size={13} color="#38bdf8" /> <span>Edit Employee</span>
-                              </button>
-                              <button onClick={() => { onViewEmployee(emp); setActionMenu(null); }}>
-                                <Eye size={13} /> <span>View Performance</span>
-                              </button>
-                              <button onClick={() => { onOpenCRM && onOpenCRM(emp); setActionMenu(null); }}>
-                                <ExternalLink size={13} color="#10b981" /> <span>Open CRM</span>
-                              </button>
-                              <button onClick={() => { handleOpenAadhaarModal(emp); setActionMenu(null); }}>
-                                <ShieldCheck size={13} color="#f59e0b" /> <span>View Aadhaar Docs</span>
-                              </button>
-                              <button onClick={() => handleToggleStatus(emp)}>
-                                {emp.status === 'active' ? <><ToggleLeft size={13} /> <span>Deactivate</span></> : <><ToggleRight size={13} /> <span>Activate</span></>}
-                              </button>
-                              <button onClick={() => { setResetModal(emp); setActionMenu(null); setNewPassword(''); }}>
-                                <KeyRound size={13} /> <span>Reset Password</span>
-                              </button>
-                            </div>
-                          )}
-                        </div>
+                        {/* More Actions Menu (Admin Only) */}
+                        {user?.role === 'ADMIN' && (
+                          <div style={{ position: 'relative' }}>
+                            <button className="admin-action-btn" onClick={() => setActionMenu(actionMenu === emp.id ? null : emp.id)}>
+                              <MoreVertical size={16} />
+                            </button>
+                            {actionMenu === emp.id && (
+                              <div className="admin-action-menu" style={{ right: 0, zIndex: 60 }}>
+                                <button onClick={() => { setEditingEmployee(emp); setActionMenu(null); }}>
+                                  <Edit3 size={13} color="#38bdf8" /> <span>Edit Employee</span>
+                                </button>
+                                <button onClick={() => { onViewEmployee(emp); setActionMenu(null); }}>
+                                  <Eye size={13} /> <span>View Performance</span>
+                                </button>
+                                <button onClick={() => { onOpenCRM && onOpenCRM(emp); setActionMenu(null); }}>
+                                  <ExternalLink size={13} color="#10b981" /> <span>Open CRM</span>
+                                </button>
+                                <button onClick={() => { handleOpenAadhaarModal(emp); setActionMenu(null); }}>
+                                  <ShieldCheck size={13} color="#f59e0b" /> <span>View Aadhaar Docs</span>
+                                </button>
+                                <button onClick={() => handleToggleStatus(emp)}>
+                                  {emp.status === 'active' ? <><ToggleLeft size={13} /> <span>Deactivate</span></> : <><ToggleRight size={13} /> <span>Activate</span></>}
+                                </button>
+                                <button onClick={() => { setResetModal(emp); setActionMenu(null); setNewPassword(''); }}>
+                                  <KeyRound size={13} /> <span>Reset Password</span>
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -1481,32 +1421,213 @@ export default function AdminPanelPage({ user, onLogout, onViewEmployee, onOpenC
     </div>
   );
 
+  // ==================== AUDIT LOGS VIEW ====================
+  const renderAuditLogs = () => (
+    <div className="admin-page-content">
+      <div className="admin-page-header">
+        <div>
+          <h1>Audit Logs</h1>
+          <p>System activities, data modifications, workspace logins, and access tracking</p>
+        </div>
+        <button
+          type="button"
+          className="admin-btn-secondary"
+          onClick={fetchAuditLogs}
+          style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+        >
+          <RefreshCw size={14} className={auditLoading ? 'admin-spin' : ''} />
+          <span>Refresh</span>
+        </button>
+      </div>
+
+      <div className="admin-section-card">
+        {/* Filter Toolbar */}
+        <div className="admin-table-toolbar" style={{ flexWrap: 'wrap', gap: '12px' }}>
+          <div className="admin-search-box" style={{ minWidth: '260px', flex: 1 }}>
+            <Search size={15} />
+            <input
+              type="text"
+              placeholder="Search by actor, entity ID, or keyword..."
+              value={auditSearch}
+              onChange={e => setAuditSearch(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && fetchAuditLogs()}
+            />
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <span style={{ fontSize: '11.5px', color: '#94a3b8' }}>Action:</span>
+            <select
+              className="admin-select-filter"
+              style={{ padding: '6px 10px', fontSize: '12px', background: '#0f172a', borderColor: '#334155', color: '#e2e8f0', borderRadius: '6px' }}
+              value={auditAction}
+              onChange={e => setAuditAction(e.target.value)}
+            >
+              <option value="ALL">All Actions</option>
+              <option value="LOGIN">LOGIN</option>
+              <option value="CREATE">CREATE</option>
+              <option value="UPDATE">UPDATE</option>
+              <option value="DELETE">DELETE</option>
+              <option value="OPEN_EMPLOYEE_CRM">OPEN_EMPLOYEE_CRM</option>
+              <option value="TARGET_UPDATED">TARGET_UPDATED</option>
+              <option value="BACKUP_EXPORT">BACKUP_EXPORT</option>
+            </select>
+
+            <span className="admin-table-count">{auditPagination.total || auditLogs.length} events</span>
+          </div>
+        </div>
+
+        {auditLoading ? (
+          <div className="admin-empty-state" style={{ padding: '40px' }}>
+            <RefreshCw size={28} className="admin-spin" color="#38bdf8" />
+            <p style={{ marginTop: '10px' }}>Loading audit events...</p>
+          </div>
+        ) : auditLogs.length === 0 ? (
+          <div className="admin-empty-state" style={{ padding: '40px' }}>
+            <ShieldCheck size={36} color="#475569" />
+            <p>No audit log events found matching current criteria.</p>
+          </div>
+        ) : (
+          <div className="admin-table-wrapper">
+            <table className="admin-table">
+              <thead>
+                <tr>
+                  <th style={{ width: '150px' }}>Timestamp</th>
+                  <th style={{ width: '160px' }}>Actor</th>
+                  <th style={{ width: '130px' }}>Action</th>
+                  <th style={{ width: '100px' }}>Entity</th>
+                  <th>Details & Field Modifications</th>
+                </tr>
+              </thead>
+              <tbody>
+                {auditLogs.map(log => (
+                  <tr key={log.id}>
+                    <td style={{ fontSize: '11.5px', color: '#94a3b8', whiteSpace: 'nowrap' }}>
+                      {new Date(log.created_at).toLocaleString('en-IN', {
+                        day: '2-digit', month: 'short', year: 'numeric',
+                        hour: '2-digit', minute: '2-digit', second: '2-digit'
+                      })}
+                    </td>
+                    <td>
+                      <div style={{ fontWeight: 600, color: '#f8fafc', fontSize: '12px' }}>
+                        {log.user_name || 'System'}
+                      </div>
+                      <div style={{ fontSize: '10.5px', color: '#64748b' }}>
+                        ID: {log.user_id || '1'}
+                      </div>
+                    </td>
+                    <td>
+                      <span style={{
+                        fontSize: '10px',
+                        fontWeight: 700,
+                        padding: '2px 7px',
+                        borderRadius: '4px',
+                        display: 'inline-block',
+                        background: log.action.includes('CREATE') ? 'rgba(52,211,153,0.15)' :
+                          log.action.includes('UPDATE') ? 'rgba(56,189,248,0.15)' :
+                          log.action.includes('DELETE') ? 'rgba(248,113,113,0.15)' :
+                          log.action.includes('LOGIN') ? 'rgba(167,139,250,0.15)' : 'rgba(251,191,36,0.15)',
+                        color: log.action.includes('CREATE') ? '#34d399' :
+                          log.action.includes('UPDATE') ? '#38bdf8' :
+                          log.action.includes('DELETE') ? '#f87171' :
+                          log.action.includes('LOGIN') ? '#a78bfa' : '#fbbf24',
+                        border: `1px solid ${
+                          log.action.includes('CREATE') ? 'rgba(52,211,153,0.3)' :
+                          log.action.includes('UPDATE') ? 'rgba(56,189,248,0.3)' :
+                          log.action.includes('DELETE') ? 'rgba(248,113,113,0.3)' :
+                          log.action.includes('LOGIN') ? 'rgba(167,139,250,0.3)' : 'rgba(251,191,36,0.3)'
+                        }`
+                      }}>
+                        {log.action}
+                      </span>
+                    </td>
+                    <td>
+                      <span className="admin-badge-id" style={{ fontSize: '10.5px' }}>
+                        {log.entity_type || 'SYSTEM'} {log.entity_id ? `#${log.entity_id}` : ''}
+                      </span>
+                    </td>
+                    <td style={{ fontSize: '12px', color: '#cbd5e1', wordBreak: 'break-word' }}>
+                      {log.details}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+
   // ==================== SETTINGS VIEW ====================
   const renderSettings = () => (
     <div className="admin-page-content">
       <div className="admin-page-header">
-        <h1>Settings</h1>
-        <p>Admin panel configuration</p>
+        <h1>Settings & System Maintenance</h1>
+        <p>Admin panel configuration, security profiles, and database disaster recovery</p>
       </div>
-      <div className="admin-section-card">
-        <div className="admin-settings-info">
-          <div className="admin-settings-row">
-            <span className="admin-settings-label">Admin Name</span>
-            <span className="admin-settings-value">{user?.name || 'Admin User'}</span>
-          </div>
-          <div className="admin-settings-row">
-            <span className="admin-settings-label">Admin Email</span>
-            <span className="admin-settings-value">{user?.email || 'settlexperts@gmail.com'}</span>
-          </div>
-          <div className="admin-settings-row">
-            <span className="admin-settings-label">Role</span>
-            <span className="admin-settings-value"><span className="admin-status-badge active">Administrator</span></span>
-          </div>
-          <div className="admin-settings-row">
-            <span className="admin-settings-label">Total Employees</span>
-            <span className="admin-settings-value">{employees.length}</span>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '16px' }}>
+        {/* Profile Card */}
+        <div className="admin-section-card">
+          <h3 style={{ fontSize: '13.5px', fontWeight: 700, color: '#f8fafc', marginBottom: '14px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <Shield size={16} color="#38bdf8" /> <span>Account Profile</span>
+          </h3>
+          <div className="admin-settings-info">
+            <div className="admin-settings-row">
+              <span className="admin-settings-label">Name</span>
+              <span className="admin-settings-value">{user?.name || 'Admin User'}</span>
+            </div>
+            <div className="admin-settings-row">
+              <span className="admin-settings-label">Email</span>
+              <span className="admin-settings-value">{user?.email || 'settlexperts@gmail.com'}</span>
+            </div>
+            <div className="admin-settings-row">
+              <span className="admin-settings-label">Role</span>
+              <span className="admin-settings-value">
+                <span className="admin-status-badge active">
+                  {user?.role === 'ADMIN' ? 'Administrator' : 'Manager (Operations)'}
+                </span>
+              </span>
+            </div>
+            <div className="admin-settings-row">
+              <span className="admin-settings-label">Total Staff</span>
+              <span className="admin-settings-value">{employees.length} Members</span>
+            </div>
           </div>
         </div>
+
+        {/* Backup & Disaster Recovery Card */}
+        {user?.role === 'ADMIN' && (
+          <div className="admin-section-card" style={{ border: '1px solid #1e3a8a', background: 'linear-gradient(180deg, rgba(30,58,138,0.15) 0%, rgba(15,23,42,0.6) 100%)' }}>
+            <h3 style={{ fontSize: '13.5px', fontWeight: 700, color: '#60a5fa', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <Download size={16} color="#60a5fa" /> <span>Database Backup & Disaster Recovery</span>
+            </h3>
+            <p style={{ fontSize: '12px', color: '#94a3b8', marginBottom: '16px', lineHeight: '1.5' }}>
+              Generate and download a complete JSON snapshot of all Supabase CRM tables (Leads, Clients, Agreements, Payments, Users, and Audit Logs).
+            </p>
+
+            <button
+              type="button"
+              className="admin-btn-primary"
+              onClick={handleDownloadBackup}
+              style={{
+                width: '100%',
+                padding: '10px 14px',
+                background: 'linear-gradient(135deg, #2563eb, #1d4ed8)',
+                borderRadius: '6px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '8px',
+                fontWeight: 600,
+                fontSize: '12.5px'
+              }}
+            >
+              <Download size={15} />
+              <span>Export & Download Database Snapshot (.JSON)</span>
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
