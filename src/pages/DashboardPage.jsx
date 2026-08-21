@@ -42,8 +42,8 @@ export default function DashboardPage({
     try {
       setLoading(true);
       const params = new URLSearchParams();
-      if (user && user.role === 'EMPLOYEE') {
-        params.append('assigned_to', user.name);
+      if (user && (user.role === 'EMPLOYEE' || user.isFiltered)) {
+        params.append('assigned_to', user.filterName || user.name);
       }
       const url = params.toString() ? `/api/dashboard/summary?${params.toString()}` : '/api/dashboard/summary';
       const token = localStorage.getItem('crm_token');
