@@ -114,9 +114,36 @@ app.post('/api/auth/login', async (req, res) => {
 
 app.get('/api/auth/me', authenticateToken, async (req, res) => {
   try {
-    const { data: user } = await supabase.from('users').select('id, name, email, role, status').eq('id', req.user.id).single();
+    const { data: user } = await supabase.from('users').select('id, name, employee_id, email, phone, role, department, designation, status, employment_status, joining_date, profile_photo').eq('id', req.user.id).single();
     if (!user) return res.status(404).json({ error: 'User not found' });
     res.json({ user });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// Employee self-profile endpoint (used by employee login/dashboard)
+app.get('/api/employee/me', authenticateToken, async (req, res) => {
+  try {
+    const { data: user } = await supabase.from('users').select('id, name, employee_id, email, phone, role, department, designation, status, employment_status, joining_date, profile_photo, aadhaar_number').eq('id', req.user.id).single();
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    // Mask aadhaar - only show last 4 digits
+    const maskedAadhaar = user.aadhaar_number
+      ? 'XXXX XXXX ' + String(user.aadhaar_number).replace(/\D/g, '').slice(-4)
+      : null;
+    res.json({
+      id: user.id,
+      name: user.name,
+      employee_id: user.employee_id || '',
+      email: user.email,
+      phone: user.phone || '',
+      role: user.role,
+      department: user.department || '',
+      designation: user.designation || '',
+      status: user.status || 'active',
+      employment_status: user.employment_status || user.status || 'active',
+      joining_date: user.joining_date || '',
+      profile_photo: user.profile_photo || '',
+      masked_aadhaar: maskedAadhaar
+    });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -588,10 +615,36 @@ app.post('/api/agreements', authenticateToken, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// Get single agreement by ID (used by agreement preview / view modal)
+app.get('/api/agreements/:id', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { data: ag } = await supabase.from('agreements').select('*').eq('id', id).single();
+    if (!ag) return res.status(404).json({ error: 'Agreement not found' });
+
+    // Enrich with client data if available
+    if (ag.client_name) {
+      const { data: client } = await supabase.from('clients').select('address, city, dob, assigned_consultant, pan, phone, email').eq('name', ag.client_name).maybeSingle();
+      if (client) {
+        ag.client_address = client.address || '';
+        ag.client_city = client.city || '';
+        ag.dob = ag.dob || client.dob || '';
+        ag.assigned_consultant = ag.assigned_consultant || client.assigned_consultant || '';
+        ag.pan = ag.pan || client.pan || '';
+        ag.phone = ag.phone || client.phone || '';
+        ag.email = ag.email || client.email || '';
+      }
+    }
+    res.json(ag);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+
 app.put('/api/agreements/:id', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
     const { client_name, email, phone, pan, lender, loan_account_number, loan_amount, loan_type, agreement_date, status, notes } = req.body;
+
     const updateData = { updated_at: new Date().toISOString() };
     if (client_name !== undefined) updateData.client_name = client_name;
     if (email !== undefined) updateData.email = email;
@@ -903,47 +956,206 @@ app.get('/api/admin/employees', authenticateToken, requireAdmin, async (req, res
 
 app.post('/api/admin/employees', authenticateToken, requireAdmin, async (req, res) => {
   try {
-    const { name, employee_id, email, phone, department, designation, password } = req.body;
-    if (!name || !email || !password) return res.status(400).json({ error: 'Name, email, and password are required' });
+    const {
+      name, employee_id, email, phone, department, designation,
+      employment_status, joining_date, profile_photo,
+      aadhaar_number, aadhaar_front_document, aadhaar_back_document,
+      password
+    } = req.body;
 
-    const { data: existing } = await supabase.from('users').select('id').ilike('email', email.trim()).single();
-    if (existing) return res.status(400).json({ error: 'An account with this email already exists' });
-    if (employee_id) {
-      const { data: existingEid } = await supabase.from('users').select('id').eq('employee_id', employee_id.trim()).single();
-      if (existingEid) return res.status(400).json({ error: 'This Employee ID is already taken' });
+    if (!name || !name.trim()) return res.status(400).json({ error: 'Full Name is required' });
+    if (!employee_id || !employee_id.trim()) return res.status(400).json({ error: 'Employee ID is required' });
+    if (!email || !email.trim()) return res.status(400).json({ error: 'Email is required' });
+    if (!phone || !phone.trim()) return res.status(400).json({ error: 'Mobile Number is required' });
+    if (!department || !department.trim()) return res.status(400).json({ error: 'Department is required' });
+    if (!designation || !designation.trim()) return res.status(400).json({ error: 'Designation is required' });
+    if (!password || password.length < 6) return res.status(400).json({ error: 'Password must be at least 6 characters' });
+
+    // Check email uniqueness
+    const { data: existingEmail } = await supabase.from('users').select('id').ilike('email', email.trim()).maybeSingle();
+    if (existingEmail) return res.status(400).json({ error: 'An account with this email address already exists' });
+
+    // Check employee_id uniqueness
+    const cleanEid = employee_id.trim();
+    const { data: existingEid } = await supabase.from('users').select('id').eq('employee_id', cleanEid).maybeSingle();
+    if (existingEid) return res.status(400).json({ error: `Employee ID "${cleanEid}" is already in use by another staff member` });
+
+    // Validate Aadhaar if provided
+    const cleanAadhaar = (aadhaar_number || '').replace(/\D/g, '');
+    if (cleanAadhaar && cleanAadhaar.length !== 12) {
+      return res.status(400).json({ error: 'Aadhaar Number must be exactly 12 numeric digits' });
     }
 
     const hash = bcrypt.hashSync(password, bcrypt.genSaltSync(10));
-    const { data: newEmp, error } = await supabase.from('users').insert({ name: name.trim(), employee_id: (employee_id || '').trim() || null, email: email.trim().toLowerCase(), phone: (phone || '').trim(), password_hash: hash, role: 'EMPLOYEE', department: (department || '').trim(), designation: (designation || '').trim(), status: 'active' }).select('id, name, employee_id, email, phone, role, department, designation, status, created_at').single();
+    const insertData = {
+      name: name.trim(),
+      employee_id: cleanEid,
+      email: email.trim().toLowerCase(),
+      phone: phone.trim(),
+      password_hash: hash,
+      role: 'EMPLOYEE',
+      department: department.trim(),
+      designation: designation.trim(),
+      status: 'active',
+      employment_status: employment_status || 'active',
+      joining_date: joining_date || new Date().toISOString().split('T')[0],
+      profile_photo: profile_photo || '',
+      aadhaar_number: cleanAadhaar || '',
+      aadhaar_front_document: aadhaar_front_document || '',
+      aadhaar_back_document: aadhaar_back_document || ''
+    };
+
+    const { data: newEmp, error } = await supabase.from('users').insert(insertData)
+      .select('id, name, employee_id, email, phone, role, department, designation, status, employment_status, joining_date, profile_photo, created_at')
+      .single();
     if (error) throw error;
-    await logActivity(req.user.id, req.user.name, 'CREATE_EMPLOYEE', 'USER', newEmp.id, `Created employee: ${name} (${employee_id})`);
-    res.status(201).json(newEmp);
+
+    await logActivity(req.user.id, req.user.name, 'CREATE_EMPLOYEE', 'USER', newEmp.id, `Created employee: ${name} (ID: ${cleanEid})`);
+    res.status(201).json({
+      ...newEmp,
+      aadhaar_number: cleanAadhaar ? 'XXXX XXXX ' + cleanAadhaar.slice(-4) : '',
+      has_aadhaar_front: Boolean(aadhaar_front_document),
+      has_aadhaar_back: Boolean(aadhaar_back_document)
+    });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 app.get('/api/admin/employees/:id', authenticateToken, requireAdmin, async (req, res) => {
   try {
-    const { data: emp } = await supabase.from('users').select('id, name, employee_id, email, phone, role, department, designation, status, created_at, updated_at').eq('id', req.params.id).eq('role', 'EMPLOYEE').single();
+    const { data: emp } = await supabase.from('users')
+      .select('id, name, employee_id, email, phone, role, department, designation, status, employment_status, joining_date, profile_photo, aadhaar_number, aadhaar_front_document, aadhaar_back_document, created_at, updated_at')
+      .eq('id', req.params.id).eq('role', 'EMPLOYEE').single();
     if (!emp) return res.status(404).json({ error: 'Employee not found' });
-    res.json(emp);
+    res.json({
+      ...emp,
+      aadhaar_number: emp.aadhaar_number ? 'XXXX XXXX ' + String(emp.aadhaar_number).replace(/\D/g, '').slice(-4) : '',
+      has_aadhaar_front: Boolean(emp.aadhaar_front_document),
+      has_aadhaar_back: Boolean(emp.aadhaar_back_document),
+      aadhaar_front_document: undefined,
+      aadhaar_back_document: undefined
+    });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// Secure Aadhaar Reveal Endpoint (Admin Only with Audit Logging)
+app.get('/api/admin/employees/:id/aadhaar', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const { data: emp } = await supabase.from('users')
+      .select('id, name, employee_id, aadhaar_number, aadhaar_front_document, aadhaar_back_document')
+      .eq('id', req.params.id).eq('role', 'EMPLOYEE').single();
+    if (!emp) return res.status(404).json({ error: 'Employee not found' });
+
+    await logActivity(req.user.id, req.user.name, 'VIEW_AADHAAR_DOCUMENT', 'USER', emp.id, `Viewed sensitive Aadhaar details for employee ${emp.name} (${emp.employee_id})`);
+    res.json({
+      success: true,
+      employee_id: emp.employee_id,
+      employee_name: emp.name,
+      aadhaar_number: emp.aadhaar_number || '',
+      masked_aadhaar: emp.aadhaar_number ? 'XXXX XXXX ' + String(emp.aadhaar_number).replace(/\D/g, '').slice(-4) : '',
+      aadhaar_front_document: emp.aadhaar_front_document || null,
+      aadhaar_back_document: emp.aadhaar_back_document || null
+    });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 app.put('/api/admin/employees/:id', authenticateToken, requireAdmin, async (req, res) => {
   try {
-    const { name, employee_id, phone, department, designation } = req.body;
+    const { id } = req.params;
+    const {
+      name, employee_id, email, phone, department, designation,
+      employment_status, joining_date, status, profile_photo,
+      aadhaar_number, aadhaar_front_document, aadhaar_back_document,
+      remove_profile_photo, remove_aadhaar_front, remove_aadhaar_back
+    } = req.body;
+
+    // Check if employee exists
+    const { data: existing } = await supabase.from('users').select('*').eq('id', id).eq('role', 'EMPLOYEE').single();
+    if (!existing) return res.status(404).json({ error: 'Employee not found' });
+
+    // Email uniqueness check
+    if (email && email.trim()) {
+      const { data: dupEmail } = await supabase.from('users').select('id').ilike('email', email.trim()).neq('id', id).maybeSingle();
+      if (dupEmail) return res.status(400).json({ error: 'Another account with this email already exists' });
+    }
+
+    // Employee ID uniqueness check
+    if (employee_id && employee_id.trim()) {
+      const cleanEid = employee_id.trim();
+      const { data: dupEid } = await supabase.from('users').select('id').eq('employee_id', cleanEid).neq('id', id).maybeSingle();
+      if (dupEid) return res.status(400).json({ error: `Employee ID "${cleanEid}" is already used by another employee` });
+    }
+
+    // Validate Aadhaar if changing
+    let newAadhaar = existing.aadhaar_number;
+    if (aadhaar_number !== undefined) {
+      const cleanAadhaar = (aadhaar_number || '').replace(/\D/g, '');
+      if (cleanAadhaar && cleanAadhaar.length !== 12) {
+        return res.status(400).json({ error: 'Aadhaar Number must be exactly 12 numeric digits' });
+      }
+      newAadhaar = cleanAadhaar || '';
+    }
+
+    // Handle profile photo
+    let newPhoto = existing.profile_photo;
+    if (remove_profile_photo) newPhoto = '';
+    else if (profile_photo !== undefined) newPhoto = profile_photo;
+
+    // Handle aadhaar documents
+    let newFront = existing.aadhaar_front_document;
+    if (remove_aadhaar_front) newFront = '';
+    else if (aadhaar_front_document !== undefined) newFront = aadhaar_front_document;
+
+    let newBack = existing.aadhaar_back_document;
+    if (remove_aadhaar_back) newBack = '';
+    else if (aadhaar_back_document !== undefined) newBack = aadhaar_back_document;
+
     const updateData = { updated_at: new Date().toISOString() };
-    if (name !== undefined) updateData.name = name;
-    if (employee_id !== undefined) updateData.employee_id = employee_id;
+    if (name !== undefined) updateData.name = name.trim();
+    if (employee_id !== undefined) updateData.employee_id = employee_id.trim();
+    if (email !== undefined) updateData.email = email.trim().toLowerCase();
     if (phone !== undefined) updateData.phone = phone;
     if (department !== undefined) updateData.department = department;
     if (designation !== undefined) updateData.designation = designation;
-    await supabase.from('users').update(updateData).eq('id', req.params.id).eq('role', 'EMPLOYEE');
-    await logActivity(req.user.id, req.user.name, 'UPDATE_EMPLOYEE', 'USER', req.params.id, `Updated employee ID: ${req.params.id}`);
-    const { data: updated } = await supabase.from('users').select('id, name, employee_id, email, phone, role, department, designation, status, created_at, updated_at').eq('id', req.params.id).single();
-    res.json(updated);
+    if (employment_status !== undefined) updateData.employment_status = employment_status;
+    if (joining_date !== undefined) updateData.joining_date = joining_date;
+    if (status !== undefined) updateData.status = status;
+    updateData.profile_photo = newPhoto;
+    updateData.aadhaar_number = newAadhaar;
+    updateData.aadhaar_front_document = newFront;
+    updateData.aadhaar_back_document = newBack;
+
+    await supabase.from('users').update(updateData).eq('id', id).eq('role', 'EMPLOYEE');
+    await logActivity(req.user.id, req.user.name, 'UPDATE_EMPLOYEE', 'USER', id, `Updated employee profile: ${name || existing.name}`);
+
+    const { data: updated } = await supabase.from('users')
+      .select('id, name, employee_id, email, phone, role, department, designation, status, employment_status, joining_date, profile_photo, created_at, updated_at')
+      .eq('id', id).single();
+    res.json({
+      ...updated,
+      aadhaar_number: newAadhaar ? 'XXXX XXXX ' + String(newAadhaar).replace(/\D/g, '').slice(-4) : '',
+      has_aadhaar_front: Boolean(newFront),
+      has_aadhaar_back: Boolean(newBack)
+    });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
+
+// Audit CRM Navigation and Profile Views
+app.post('/api/admin/employees/:id/audit', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const { action = 'OPEN_EMPLOYEE_CRM', details } = req.body;
+    const { data: emp } = await supabase.from('users').select('id, name, employee_id').eq('id', req.params.id).single();
+    if (!emp) return res.status(404).json({ error: 'Employee not found' });
+
+    const logAction = ['OPEN_EMPLOYEE_CRM', 'VIEW_EMPLOYEE_PROFILE'].includes(action) ? action : 'OPEN_EMPLOYEE_CRM';
+    const detailMsg = details || (logAction === 'OPEN_EMPLOYEE_CRM'
+      ? `Admin navigated into CRM workspace for employee ${emp.name} (${emp.employee_id})`
+      : `Admin viewed detailed profile for employee ${emp.name} (${emp.employee_id})`);
+
+    await logActivity(req.user.id, req.user.name, logAction, 'USER', emp.id, detailMsg);
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 
 app.put('/api/admin/employees/:id/status', authenticateToken, requireAdmin, async (req, res) => {
   try {
@@ -1210,7 +1422,20 @@ async function seedIfEmpty() {
 // ==================== ERROR HANDLERS ====================
 
 app.all('/api/*', (req, res) => { res.status(404).json({ success: false, error: `API route not found: ${req.method} ${req.originalUrl}` }); });
+
+// Serve frontend build (dist) if available
+const fs = require('fs');
+const path = require('path');
+const distPath = path.join(__dirname, '../dist');
+if (fs.existsSync(distPath)) {
+  app.use(express.static(distPath));
+  app.get('*', (req, res) => {
+    res.sendFile(path.join(distPath, 'index.html'));
+  });
+}
+
 app.use((err, req, res, next) => { console.error('Express Server Error:', err); res.status(err.status || 500).json({ success: false, error: err.message || 'Internal server error' }); });
+
 
 // ==================== START ====================
 app.listen(PORT, '0.0.0.0', async () => {

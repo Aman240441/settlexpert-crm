@@ -8,8 +8,9 @@
     "build": "vite build",
     "postinstall": "vite build",
     "preview": "vite preview",
-    "start": "node server/server.cjs",
-    "server": "node server/server.cjs",
+    "start": "node server/server-supabase.cjs",
+    "server": "node server/server-supabase.cjs",
+    "server:sqlite": "node server/server.cjs",
     "server:supabase": "node server/server-supabase.cjs"
   },
   "dependencies": {

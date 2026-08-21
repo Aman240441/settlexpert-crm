@@ -4,7 +4,7 @@ services:
     env: node
     plan: free
     buildCommand: npm install && npm run build
-    startCommand: node server/server.cjs
+    startCommand: node server/server-supabase.cjs
     envVars:
       - key: PORT
         value: 10000
