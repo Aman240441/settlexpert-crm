@@ -335,7 +335,7 @@ export default function App() {
 
   // ================= RENDER =================
   if (!user) {
-    return <LoginPage onLogin={setUser} />;
+    return <LoginPage onLoginSuccess={(u) => setUser(u)} onLogin={(u) => setUser(u)} />;
   }
 
   // ================= ADMIN / MANAGER PORTAL ROUTING =================
