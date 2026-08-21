@@ -10,13 +10,23 @@ import {
   Shield
 } from 'lucide-react';
 
-export default function Sidebar({ currentPage, setCurrentPage, isMobileOpen, setIsMobileOpen, isCollapsed }) {
+export default function Sidebar({
+  currentPage,
+  setCurrentPage,
+  isMobileOpen,
+  setIsMobileOpen,
+  isCollapsed,
+  user,
+  onToggleViewMode
+}) {
   const [logoError, setLogoError] = useState(false);
   const [openMenus, setOpenMenus] = useState({
     leads: true,
     clients: true,
     agreements: true
   });
+
+  const isManagerOrAdmin = user?.role === 'MANAGER' || user?.role === 'ADMIN' || user?.originalRole === 'MANAGER' || user?.originalRole === 'ADMIN';
 
   const toggleSubmenu = (key, e) => {
     e.stopPropagation();
@@ -39,39 +49,58 @@ export default function Sidebar({ currentPage, setCurrentPage, isMobileOpen, set
         />
       )}
       <aside className={`sidebar ${isMobileOpen ? 'mobile-open' : ''} ${isCollapsed ? 'collapsed' : ''}`}>
-        {/* Top SettleXpert Brand Logo */}
+        {/* Top SettleXpert Brand Logo & Role Pill */}
         <div
           className="sidebar-logo"
           style={{
             display: 'flex',
-            alignItems: 'center',
-            justifyContent: isCollapsed ? 'center' : 'flex-start',
-            padding: isCollapsed ? '12px 6px' : '14px 20px',
-            height: '68px',
-            overflow: 'hidden',
+            flexDirection: 'column',
+            alignItems: isCollapsed ? 'center' : 'flex-start',
+            justifyContent: 'center',
+            padding: isCollapsed ? '10px 6px' : '12px 18px',
+            height: 'auto',
+            minHeight: '68px',
             borderBottom: '1px solid rgba(0, 0, 0, 0.07)'
           }}
         >
-          <img
-            src="/logo.png"
-            alt="SettleXpert"
-            style={{
-              height: isCollapsed ? '32px' : '42px',
-              width: 'auto',
-              maxWidth: isCollapsed ? '32px' : '185px',
-              objectFit: 'contain',
-              display: 'block',
-              mixBlendMode: 'multiply'
-            }}
-          />
-          {isMobileOpen && (
-            <button
-              className="btn-action-icon mobile-close-btn"
-              onClick={() => setIsMobileOpen(false)}
-              style={{ display: 'none', marginLeft: 'auto' }}
-            >
-              ✕
-            </button>
+          <div style={{ display: 'flex', alignItems: 'center', width: '100%', justifyContent: 'space-between' }}>
+            <img
+              src="/logo.png"
+              alt="SettleXpert"
+              style={{
+                height: isCollapsed ? '30px' : '38px',
+                width: 'auto',
+                maxWidth: isCollapsed ? '30px' : '160px',
+                objectFit: 'contain',
+                display: 'block',
+                mixBlendMode: 'multiply'
+              }}
+            />
+            {isMobileOpen && (
+              <button
+                className="btn-action-icon mobile-close-btn"
+                onClick={() => setIsMobileOpen(false)}
+                style={{ display: 'none', marginLeft: 'auto' }}
+              >
+                ✕
+              </button>
+            )}
+          </div>
+
+          {!isCollapsed && user && (
+            <div style={{ marginTop: '6px' }}>
+              <span style={{
+                fontSize: '10.5px',
+                fontWeight: 700,
+                padding: '2px 8px',
+                borderRadius: '4px',
+                background: user.role === 'ADMIN' ? '#eff6ff' : user.role === 'MANAGER' ? '#ede9fe' : '#f0fdf4',
+                color: user.role === 'ADMIN' ? '#1d4ed8' : user.role === 'MANAGER' ? '#6d28d9' : '#15803d',
+                border: `1px solid ${user.role === 'ADMIN' ? '#bfdbfe' : user.role === 'MANAGER' ? '#ddd6fe' : '#bbf7d0'}`
+              }}>
+                {user.role === 'ADMIN' ? '👑 Admin CRM' : user.role === 'MANAGER' ? '👔 Manager CRM' : '👤 Consultant Workspace'}
+              </span>
+            </div>
           )}
         </div>
 
@@ -114,7 +143,7 @@ export default function Sidebar({ currentPage, setCurrentPage, isMobileOpen, set
                   onClick={() => handleNavClick('leads')}
                 >
                   <Users size={12} />
-                  <span>My Leads</span>
+                  <span>{user?.role === 'MANAGER' ? 'Team Leads' : 'My Leads'}</span>
                 </button>
               </div>
             )}
@@ -144,7 +173,7 @@ export default function Sidebar({ currentPage, setCurrentPage, isMobileOpen, set
                   onClick={() => handleNavClick('clients')}
                 >
                   <Users size={12} />
-                  <span>Client List</span>
+                  <span>{user?.role === 'MANAGER' ? 'Team Client List' : 'Client List'}</span>
                 </button>
               </div>
             )}
@@ -179,6 +208,23 @@ export default function Sidebar({ currentPage, setCurrentPage, isMobileOpen, set
               </div>
             )}
           </div>
+
+          {/* Team Management Portal Switcher for Manager & Admin */}
+          {isManagerOrAdmin && onToggleViewMode && (
+            <div className="nav-item-container" style={{ marginTop: '16px', paddingTop: '12px', borderTop: '1px solid rgba(0,0,0,0.06)' }}>
+              <button
+                className="nav-item"
+                onClick={onToggleViewMode}
+                style={{ color: '#6d28d9' }}
+                title="Open Team Management Portal (Staff, Performance Targets, Audit Logs)"
+              >
+                <div className="nav-left">
+                  <Shield className="nav-icon" size={15} color="#6d28d9" />
+                  <span style={{ fontWeight: 700 }}>Management Portal</span>
+                </div>
+              </button>
+            </div>
+          )}
         </nav>
       </aside>
     </>
