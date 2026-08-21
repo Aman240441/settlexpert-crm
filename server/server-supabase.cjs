@@ -26,15 +26,50 @@ app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
 // ==================== HELPERS ====================
 
-async function logActivity(userId, userName, action, entityType, entityId, details) {
+function normalizePhone(phone) {
+  if (!phone) return '';
+  let clean = String(phone).replace(/\D/g, '');
+  if (clean.length > 10 && clean.startsWith('91')) {
+    clean = clean.slice(2);
+  } else if (clean.length > 10 && clean.startsWith('0')) {
+    clean = clean.slice(1);
+  }
+  return clean.slice(-10);
+}
+
+function computeFieldDiff(oldObj, newObj, trackedKeys) {
+  if (!oldObj || !newObj) return null;
+  const diff = {};
+  for (const key of trackedKeys) {
+    if (newObj[key] !== undefined) {
+      const oldVal = oldObj[key] !== null && oldObj[key] !== undefined ? String(oldObj[key]).trim() : '';
+      const newVal = newObj[key] !== null && newObj[key] !== undefined ? String(newObj[key]).trim() : '';
+      if (oldVal !== newVal) {
+        diff[key] = { from: oldVal || '(empty)', to: newVal || '(empty)' };
+      }
+    }
+  }
+  return Object.keys(diff).length > 0 ? diff : null;
+}
+
+async function logActivity(userId, userName, action, entityType, entityId, details, changes = null, workspaceContext = null) {
   try {
+    let detailStr = details || '';
+    if (changes && typeof changes === 'object' && Object.keys(changes).length > 0) {
+      const diffSummary = Object.entries(changes).map(([k, v]) => `${k}: "${v.from}" → "${v.to}"`).join(', ');
+      detailStr += ` | Changes: [${diffSummary}]`;
+    }
+    if (workspaceContext) {
+      detailStr += ` | Workspace: ${workspaceContext}`;
+    }
+
     await supabase.from('activity_logs').insert({
       user_id: userId || 1,
       user_name: userName || 'Admin User',
       action,
       entity_type: entityType,
       entity_id: entityId ? String(entityId) : null,
-      details: details || ''
+      details: detailStr
     });
   } catch (err) {
     console.error('Failed to log activity:', err.message);
@@ -57,9 +92,16 @@ function requireAdmin(req, res, next) {
   next();
 }
 
+function requireAdminOrManager(req, res, next) {
+  if (!req.user || (req.user.role !== 'ADMIN' && req.user.role !== 'MANAGER')) {
+    return res.status(403).json({ error: 'Admin or Manager access required' });
+  }
+  next();
+}
+
 function getConsultantFilter(req) {
   if (req.user && req.user.role === 'EMPLOYEE') return req.user.name;
-  if (req.user && req.user.role === 'ADMIN' && req.query && req.query.assigned_to) return req.query.assigned_to;
+  if (req.user && (req.user.role === 'ADMIN' || req.user.role === 'MANAGER') && req.query && req.query.assigned_to) return req.query.assigned_to;
   return null;
 }
 
@@ -311,13 +353,26 @@ app.get('/api/leads', authenticateToken, async (req, res) => {
 app.post('/api/leads', authenticateToken, async (req, res) => {
   try {
     const { name, email, phone, city, outstanding_amount, monthly_income, loan_type, default_status, harassment_calls, lead_status, notes } = req.body;
-    if (!name) return res.status(400).json({ error: 'Lead Name is required' });
+    if (!name || !name.trim()) return res.status(400).json({ error: 'Lead Name is required' });
+    
+    // Duplicate Protection: Check if a lead with same normalized phone already exists
+    const normPhone = normalizePhone(phone);
+    if (normPhone && normPhone.length === 10) {
+      const { data: duplicateLead } = await supabase.from('leads').select('id, name, lead_id, assigned_consultant, phone').ilike('phone', `%${normPhone}`).maybeSingle();
+      if (duplicateLead) {
+        return res.status(409).json({
+          error: `Duplicate lead detected! Phone ${phone} is already registered under Lead ${duplicateLead.lead_id} (${duplicateLead.name}, Assigned: ${duplicateLead.assigned_consultant || 'Unassigned'}).`,
+          duplicate_lead: duplicateLead
+        });
+      }
+    }
+
     const assigned_consultant = req.user.role === 'EMPLOYEE' ? req.user.name : (req.body.assigned_consultant || 'Dhruv');
     const randomNum = Math.floor(100 + Math.random() * 900);
     const lead_id = `LD-${Date.now().toString().slice(-4)}${randomNum}`;
 
     const { data: newLead, error } = await supabase.from('leads').insert({
-      lead_id, name, email: email || '', phone: phone || '', city: city || '',
+      lead_id, name: name.trim(), email: email || '', phone: phone || '', city: city || '',
       outstanding_amount: outstanding_amount || '50,000 - 1,00,000',
       monthly_income: parseFloat(monthly_income) || 0, loan_type: loan_type || 'personal_loan_settlement',
       default_status: default_status || 'yes', harassment_calls: harassment_calls || 'yes',
@@ -325,7 +380,8 @@ app.post('/api/leads', authenticateToken, async (req, res) => {
     }).select().single();
     if (error) throw error;
 
-    await logActivity(req.user.id, req.user.name, 'CREATE', 'LEAD', newLead.id, `Created lead: ${name}`);
+    const workspace = req.query.assigned_to ? `Employee: ${req.query.assigned_to}` : null;
+    await logActivity(req.user.id, req.user.name, 'CREATE', 'LEAD', newLead.id, `Created lead: ${name} (${newLead.lead_id})`, null, workspace);
     res.status(201).json(newLead);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -333,42 +389,89 @@ app.post('/api/leads', authenticateToken, async (req, res) => {
 app.put('/api/leads/:id', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
-    if (req.user.role === 'EMPLOYEE') {
-      const { data: existing } = await supabase.from('leads').select('id').eq('id', id).eq('assigned_consultant', req.user.name).single();
-      if (!existing) return res.status(403).json({ error: 'You are not authorized to update this lead' });
-    }
-    const { name, email, phone, city, outstanding_amount, monthly_income, loan_type, default_status, harassment_calls, lead_status, notes } = req.body;
-    const assigned_consultant = req.user.role === 'EMPLOYEE' ? req.user.name : (req.body.assigned_consultant !== undefined ? req.body.assigned_consultant : undefined);
-    const updateData = { updated_at: new Date().toISOString() };
-    if (name !== undefined) updateData.name = name;
-    if (email !== undefined) updateData.email = email;
-    if (phone !== undefined) updateData.phone = phone;
-    if (city !== undefined) updateData.city = city;
-    if (outstanding_amount !== undefined) updateData.outstanding_amount = outstanding_amount;
-    if (monthly_income !== undefined) updateData.monthly_income = monthly_income;
-    if (loan_type !== undefined) updateData.loan_type = loan_type;
-    if (default_status !== undefined) updateData.default_status = default_status;
-    if (harassment_calls !== undefined) updateData.harassment_calls = harassment_calls;
-    if (assigned_consultant !== undefined) updateData.assigned_consultant = assigned_consultant;
-    if (lead_status !== undefined) updateData.lead_status = lead_status;
-    if (notes !== undefined) updateData.notes = notes;
+    const { data: existing } = await supabase.from('leads').select('*').eq('id', id).maybeSingle();
+    if (!existing) return res.status(404).json({ error: 'Lead not found' });
 
-    await supabase.from('leads').update(updateData).eq('id', id);
-    await logActivity(req.user.id, req.user.name, 'UPDATE', 'LEAD', id, `Updated lead ID: ${id}`);
+    if (req.user.role === 'EMPLOYEE' && existing.assigned_consultant !== req.user.name) {
+      return res.status(403).json({ error: 'You are not authorized to update this lead' });
+    }
+
+    // Build update payload from ALL fields the frontend may send
+    const body = req.body;
+    const updateData = { updated_at: new Date().toISOString() };
+
+    // Core fields that always exist in Supabase
+    if (body.name !== undefined) updateData.name = body.name;
+    if (body.email !== undefined) updateData.email = body.email;
+    if (body.phone !== undefined) updateData.phone = body.phone;
+    if (body.city !== undefined) updateData.city = body.city;
+    if (body.outstanding_amount !== undefined) updateData.outstanding_amount = body.outstanding_amount;
+    if (body.monthly_income !== undefined) updateData.monthly_income = parseFloat(body.monthly_income) || 0;
+    if (body.loan_type !== undefined) updateData.loan_type = body.loan_type;
+    if (body.lead_status !== undefined) updateData.lead_status = body.lead_status;
+    if (body.notes !== undefined) updateData.notes = body.notes;
+    if (body.source !== undefined) updateData.source = body.source;
+
+    // default_status: accept either 'default_status' or 'paying_emis' (form field name)
+    const defaultStatus = body.default_status !== undefined ? body.default_status : body.paying_emis;
+    if (defaultStatus !== undefined) updateData.default_status = defaultStatus;
+
+    // harassment_calls: accept either field name
+    const harassmentVal = body.harassment_calls !== undefined ? body.harassment_calls : body.harassment;
+    if (harassmentVal !== undefined) updateData.harassment_calls = harassmentVal;
+
+    // assigned_consultant: only admins can reassign
+    if (req.user.role !== 'EMPLOYEE' && body.assigned_consultant !== undefined) {
+      updateData.assigned_consultant = body.assigned_consultant;
+    }
+    if (req.user.role !== 'EMPLOYEE' && body.assigned_to !== undefined) {
+      updateData.assigned_to = body.assigned_to;
+    }
+
+    // Extended fields — stored in notes JSON if columns don't exist yet in DB
+    // Try to update them; Supabase will silently ignore unknown columns via update
+    const extendedFields = ['employment_status', 'employment_type', 'settlement_needed',
+      'consultation_timing', 'credit_card_dues', 'personal_loan_dues', 'service_fee',
+      'paying_emis'];
+    for (const field of extendedFields) {
+      if (body[field] !== undefined) {
+        updateData[field] = body[field];
+      }
+    }
+
+    // Attempt the update; if Supabase errors on unmigrated columns, fallback to safe core fields
+    let { error } = await supabase.from('leads').update(updateData).eq('id', id);
+    if (error) {
+      const safeData = {};
+      const coreFields = ['name', 'email', 'phone', 'city', 'outstanding_amount',
+        'monthly_income', 'loan_type', 'default_status', 'harassment_calls',
+        'lead_status', 'notes', 'source', 'assigned_consultant', 'assigned_to', 'updated_at'];
+      for (const f of coreFields) {
+        if (updateData[f] !== undefined) safeData[f] = updateData[f];
+      }
+      const retry = await supabase.from('leads').update(safeData).eq('id', id);
+      if (retry.error) throw retry.error;
+    }
+
+    const diff = computeFieldDiff(existing, updateData, [
+      'name', 'email', 'phone', 'city', 'outstanding_amount', 'monthly_income',
+      'loan_type', 'lead_status', 'default_status', 'harassment_calls',
+      'assigned_consultant', 'notes', 'service_fee'
+    ]);
+    const workspace = req.query.assigned_to ? `Employee: ${req.query.assigned_to}` : null;
+    await logActivity(req.user.id, req.user.name, 'UPDATE', 'LEAD', id, `Updated lead ID: ${id} (${existing.name})`, diff, workspace);
+
     const { data: updated } = await supabase.from('leads').select('*').eq('id', id).single();
     res.json(updated);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-app.delete('/api/leads/:id', authenticateToken, async (req, res) => {
+app.delete('/api/leads/:id', authenticateToken, requireAdmin, async (req, res) => {
   try {
     const { id } = req.params;
-    if (req.user.role === 'EMPLOYEE') {
-      const { data: existing } = await supabase.from('leads').select('id').eq('id', id).eq('assigned_consultant', req.user.name).single();
-      if (!existing) return res.status(403).json({ error: 'You are not authorized to delete this lead' });
-    }
+    const { data: existing } = await supabase.from('leads').select('name, lead_id').eq('id', id).maybeSingle();
     await supabase.from('leads').delete().eq('id', id);
-    await logActivity(req.user.id, req.user.name, 'DELETE', 'LEAD', id, `Deleted lead ID: ${id}`);
+    await logActivity(req.user.id, req.user.name, 'DELETE', 'LEAD', id, `Deleted lead ID: ${id} (${existing?.name || ''})`);
     res.json({ success: true, message: 'Lead deleted successfully' });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -402,7 +505,20 @@ app.get('/api/clients', authenticateToken, async (req, res) => {
 app.post('/api/clients', authenticateToken, async (req, res) => {
   try {
     const { client_id, name, phone, email, city, pan, address, service_fee, fees_date, fees_status, pending_amount, received_amount, this_month_received, case_status, assigned_advocate, notes } = req.body;
-    if (!name) return res.status(400).json({ error: 'Client Name is required' });
+    if (!name || !name.trim()) return res.status(400).json({ error: 'Client Name is required' });
+
+    // Duplicate Protection: check if client with same normalized phone already exists
+    const normPhone = normalizePhone(phone);
+    if (normPhone && normPhone.length === 10) {
+      const { data: duplicateClient } = await supabase.from('clients').select('id, name, client_id, assigned_consultant, phone').ilike('phone', `%${normPhone}`).maybeSingle();
+      if (duplicateClient) {
+        return res.status(409).json({
+          error: `Duplicate client detected! Phone ${phone} is already registered under Client ${duplicateClient.client_id} (${duplicateClient.name}).`,
+          duplicate_client: duplicateClient
+        });
+      }
+    }
+
     const assigned_consultant = req.user.role === 'EMPLOYEE' ? req.user.name : (req.body.assigned_consultant || 'Dhruv');
     const cid = client_id || String(Math.floor(60000 + Math.random() * 9999));
     const fee = parseFloat(service_fee) || 0;
@@ -412,7 +528,7 @@ app.post('/api/clients', authenticateToken, async (req, res) => {
     const fStatus = fees_status || (pend === 0 && fee > 0 ? 'Paid' : 'Pending');
 
     const { data: newClient, error } = await supabase.from('clients').insert({
-      client_id: cid, name, phone: phone || '', email: email || '', city: city || '',
+      client_id: cid, name: name.trim(), phone: phone || '', email: email || '', city: city || '',
       pan: pan || '', address: address || '', service_fee: fee,
       fees_date: fees_date || new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
       fees_status: fStatus, pending_amount: pend, received_amount: rec, this_month_received: thisM,
@@ -423,7 +539,8 @@ app.post('/api/clients', authenticateToken, async (req, res) => {
     if (rec > 0) {
       await supabase.from('payments').insert({ client_id: newClient.id, amount: rec, payment_date: new Date().toISOString().split('T')[0], payment_status: 'Completed' });
     }
-    await logActivity(req.user.id, req.user.name, 'CREATE', 'CLIENT', newClient.id, `Created client: ${name} (${cid})`);
+    const workspace = req.query.assigned_to ? `Employee: ${req.query.assigned_to}` : null;
+    await logActivity(req.user.id, req.user.name, 'CREATE', 'CLIENT', newClient.id, `Created client: ${name} (${cid})`, null, workspace);
     res.status(201).json(newClient);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -431,10 +548,17 @@ app.post('/api/clients', authenticateToken, async (req, res) => {
 app.put('/api/clients/:id', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
+    let existing = null;
     if (req.user.role === 'EMPLOYEE') {
-      const { data: existing } = await supabase.from('clients').select('id').eq('id', id).eq('assigned_consultant', req.user.name).single();
-      if (!existing) return res.status(403).json({ error: 'You are not authorized to update this client' });
+      const { data } = await supabase.from('clients').select('*').eq('id', id).eq('assigned_consultant', req.user.name).single();
+      if (!data) return res.status(403).json({ error: 'You are not authorized to update this client' });
+      existing = data;
+    } else {
+      const { data } = await supabase.from('clients').select('*').eq('id', id).single();
+      if (!data) return res.status(404).json({ error: 'Client not found' });
+      existing = data;
     }
+
     const { name, phone, email, city, pan, address, service_fee, fees_date, fees_status, pending_amount, received_amount, this_month_received, case_status, assigned_advocate, notes } = req.body;
     const assigned_consultant = req.user.role === 'EMPLOYEE' ? req.user.name : (req.body.assigned_consultant !== undefined ? req.body.assigned_consultant : undefined);
     const updateData = { updated_at: new Date().toISOString() };
@@ -444,31 +568,50 @@ app.put('/api/clients/:id', authenticateToken, async (req, res) => {
     if (city !== undefined) updateData.city = city;
     if (pan !== undefined) updateData.pan = pan;
     if (address !== undefined) updateData.address = address;
-    if (service_fee !== undefined) updateData.service_fee = service_fee;
+    if (service_fee !== undefined) updateData.service_fee = parseFloat(service_fee) || 0;
     if (fees_date !== undefined) updateData.fees_date = fees_date;
     if (fees_status !== undefined) updateData.fees_status = fees_status;
-    if (pending_amount !== undefined) updateData.pending_amount = pending_amount;
-    if (received_amount !== undefined) updateData.received_amount = received_amount;
-    if (this_month_received !== undefined) updateData.this_month_received = this_month_received;
+    if (pending_amount !== undefined) updateData.pending_amount = parseFloat(pending_amount) || 0;
+    if (received_amount !== undefined) updateData.received_amount = parseFloat(received_amount) || 0;
+    if (this_month_received !== undefined) updateData.this_month_received = parseFloat(this_month_received) || 0;
     if (case_status !== undefined) updateData.case_status = case_status;
     if (assigned_consultant !== undefined) updateData.assigned_consultant = assigned_consultant;
-    if (assigned_advocate !== undefined) updateData.assigned_advocate = assigned_advocate;
+    
+    // Advocate Name: Admin and Manager can update assigned_advocate
+    if ((req.user.role === 'ADMIN' || req.user.role === 'MANAGER') && assigned_advocate !== undefined) {
+      updateData.assigned_advocate = assigned_advocate;
+    }
     if (notes !== undefined) updateData.notes = notes;
 
+    // Automatic pending amount & fees status consistency check if service_fee or received_amount changed without explicit pending_amount
+    if (service_fee !== undefined && pending_amount === undefined) {
+      const rec = updateData.received_amount !== undefined ? updateData.received_amount : (existing.received_amount || 0);
+      const fee = updateData.service_fee;
+      updateData.pending_amount = Math.max(0, fee - rec);
+      if (fees_status === undefined) {
+        updateData.fees_status = updateData.pending_amount === 0 && fee > 0 ? 'Paid' : 'Pending';
+      }
+    }
+
     await supabase.from('clients').update(updateData).eq('id', id);
-    await logActivity(req.user.id, req.user.name, 'UPDATE', 'CLIENT', id, `Updated client ID: ${id}`);
+
+    const diff = computeFieldDiff(existing, updateData, [
+      'name', 'email', 'phone', 'city', 'pan', 'address', 'service_fee',
+      'fees_date', 'fees_status', 'pending_amount', 'received_amount',
+      'this_month_received', 'case_status', 'assigned_advocate',
+      'assigned_consultant', 'notes'
+    ]);
+    const workspace = req.query.assigned_to ? `Employee: ${req.query.assigned_to}` : null;
+    await logActivity(req.user.id, req.user.name, 'UPDATE', 'CLIENT', id, `Updated client ID: ${id} (${name || existing.name})`, diff, workspace);
+
     const { data: updated } = await supabase.from('clients').select('*').eq('id', id).single();
     res.json(updated);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-app.delete('/api/clients/:id', authenticateToken, async (req, res) => {
+app.delete('/api/clients/:id', authenticateToken, requireAdmin, async (req, res) => {
   try {
     const { id } = req.params;
-    if (req.user.role === 'EMPLOYEE') {
-      const { data: existing } = await supabase.from('clients').select('id').eq('id', id).eq('assigned_consultant', req.user.name).single();
-      if (!existing) return res.status(403).json({ error: 'You are not authorized to delete this client' });
-    }
     await supabase.from('clients').delete().eq('id', id);
     await logActivity(req.user.id, req.user.name, 'DELETE', 'CLIENT', id, `Deleted client ID: ${id}`);
     res.json({ success: true, message: 'Client deleted successfully' });
@@ -484,6 +627,24 @@ app.post('/api/leads/:id/convert', authenticateToken, async (req, res) => {
     if (req.user.role === 'EMPLOYEE') leadQuery = leadQuery.eq('assigned_consultant', req.user.name);
     const { data: lead } = await leadQuery.single();
     if (!lead) return res.status(403).json({ error: 'Lead not found or unauthorized' });
+
+    // Idempotency guard: if lead already has a client record, skip and return success
+    const { data: existingClient } = await supabase
+      .from('clients')
+      .select('id, client_id, name')
+      .ilike('name', lead.name)
+      .eq('phone', lead.phone || '')
+      .maybeSingle();
+    if (existingClient) {
+      // Update lead status to Converted but do NOT create a new client
+      await supabase.from('leads').update({ lead_status: 'Converted', updated_at: new Date().toISOString() }).eq('id', id);
+      return res.status(200).json({
+        success: true,
+        already_converted: true,
+        message: `Lead ${lead.name} was already converted to Client (${existingClient.client_id}).`,
+        client: existingClient
+      });
+    }
 
     const { service_fee = 25000, paid_amount = 0, payment_method = 'UPI', reference_number = '', payment_date = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }), pan = '', address = '', city = lead.city || '', assigned_advocate = 'Adv Sparsh Gupta', notes = '' } = req.body;
     const assigned_consultant = req.user.role === 'EMPLOYEE' ? req.user.name : (req.body.assigned_consultant || lead.assigned_consultant || 'Dhruv');
@@ -665,7 +826,7 @@ app.put('/api/agreements/:id', authenticateToken, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-app.delete('/api/agreements/:id', authenticateToken, async (req, res) => {
+app.delete('/api/agreements/:id', authenticateToken, requireAdmin, async (req, res) => {
   try {
     const { id } = req.params;
     await supabase.from('agreements').delete().eq('id', id);
@@ -685,7 +846,7 @@ app.post('/api/mail/send-bulk', authenticateToken, async (req, res) => {
 
 // ==================== ADMIN DASHBOARD ====================
 
-app.get('/api/admin/dashboard', authenticateToken, requireAdmin, async (req, res) => {
+app.get('/api/admin/dashboard', authenticateToken, requireAdminOrManager, async (req, res) => {
   try {
     const [
       { count: totalEmployees }, { count: activeEmployees },
@@ -726,7 +887,7 @@ app.get('/api/admin/dashboard', authenticateToken, requireAdmin, async (req, res
 
 // ==================== ADMIN LEADS MANAGEMENT ====================
 
-app.get('/api/admin/leads', authenticateToken, requireAdmin, async (req, res) => {
+app.get('/api/admin/leads', authenticateToken, requireAdminOrManager, async (req, res) => {
   try {
     const { search, status, assignment, date_filter, page = 1, limit = 50, sort_dir = 'DESC' } = req.query;
 
@@ -763,7 +924,7 @@ app.get('/api/admin/leads', authenticateToken, requireAdmin, async (req, res) =>
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-app.put('/api/admin/leads/:id/assign', authenticateToken, requireAdmin, async (req, res) => {
+app.put('/api/admin/leads/:id/assign', authenticateToken, requireAdminOrManager, async (req, res) => {
   try {
     const { id } = req.params;
     const { employee_id, notes } = req.body;
@@ -785,7 +946,7 @@ app.put('/api/admin/leads/:id/assign', authenticateToken, requireAdmin, async (r
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-app.put('/api/admin/leads/bulk-assign', authenticateToken, requireAdmin, async (req, res) => {
+app.put('/api/admin/leads/bulk-assign', authenticateToken, requireAdminOrManager, async (req, res) => {
   try {
     const { lead_ids, employee_id, notes } = req.body;
     if (!Array.isArray(lead_ids) || lead_ids.length === 0) return res.status(400).json({ error: 'lead_ids must be a non-empty array' });
@@ -807,7 +968,7 @@ app.put('/api/admin/leads/bulk-assign', authenticateToken, requireAdmin, async (
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-app.get('/api/admin/leads/:id/history', authenticateToken, requireAdmin, async (req, res) => {
+app.get('/api/admin/leads/:id/history', authenticateToken, requireAdminOrManager, async (req, res) => {
   try {
     const { id } = req.params;
     const { data: lead } = await supabase.from('leads').select('id, name, lead_id, phone').eq('id', id).single();
@@ -817,7 +978,7 @@ app.get('/api/admin/leads/:id/history', authenticateToken, requireAdmin, async (
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-app.get('/api/admin/leads/:id', authenticateToken, requireAdmin, async (req, res) => {
+app.get('/api/admin/leads/:id', authenticateToken, requireAdminOrManager, async (req, res) => {
   try {
     const { id } = req.params;
     const { data: lead } = await supabase.from('leads').select('*').eq('id', id).single();
@@ -830,8 +991,8 @@ app.get('/api/admin/leads/:id', authenticateToken, requireAdmin, async (req, res
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// Admin Import Leads
-app.post('/api/admin/leads/import', authenticateToken, requireAdmin, async (req, res) => {
+// Admin / Manager Import Leads
+app.post('/api/admin/leads/import', authenticateToken, requireAdminOrManager, async (req, res) => {
   try {
     const { distribution_mode = 'single', employee_id, employee_ids = [], filename = 'imported_leads.xlsx', duplicate_action = 'skip', leads } = req.body;
     if (!Array.isArray(leads) || leads.length === 0) return res.status(400).json({ success: false, error: 'No lead rows provided' });
@@ -916,14 +1077,14 @@ app.post('/api/admin/leads/import', authenticateToken, requireAdmin, async (req,
   } catch (err) { res.status(500).json({ success: false, error: err.message }); }
 });
 
-app.get('/api/admin/leads/import-history', authenticateToken, requireAdmin, async (req, res) => {
+app.get('/api/admin/leads/import-history', authenticateToken, requireAdminOrManager, async (req, res) => {
   try {
     const { data: history = [] } = await supabase.from('lead_import_history').select('*').order('id', { ascending: false }).limit(100);
     res.json({ data: history });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-app.get('/api/admin/leads/import/:batchId', authenticateToken, requireAdmin, async (req, res) => {
+app.get('/api/admin/leads/import/:batchId', authenticateToken, requireAdminOrManager, async (req, res) => {
   try {
     const { batchId } = req.params;
     const [{ data: history }, { data: leads = [] }] = await Promise.all([
@@ -934,13 +1095,13 @@ app.get('/api/admin/leads/import/:batchId', authenticateToken, requireAdmin, asy
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// ==================== ADMIN EMPLOYEES ====================
+// ==================== ADMIN / MANAGER EMPLOYEES ====================
 
-app.get('/api/admin/employees', authenticateToken, requireAdmin, async (req, res) => {
+app.get('/api/admin/employees', authenticateToken, requireAdminOrManager, async (req, res) => {
   try {
     const { data: employees = [] } = await supabase.from('users')
       .select('id, name, employee_id, email, phone, role, department, designation, status, employment_status, joining_date, profile_photo, created_at, updated_at')
-      .eq('role', 'EMPLOYEE').order('id', { ascending: false });
+      .in('role', ['EMPLOYEE', 'MANAGER']).order('id', { ascending: false });
     const enriched = await Promise.all(employees.map(async emp => {
       const [{ count: lc }, { count: clients }, { data: colData = [] }, { count: cc }] = await Promise.all([
         supabase.from('leads').select('*', { count: 'exact', head: true }).eq('assigned_consultant', emp.name),
@@ -960,7 +1121,7 @@ app.post('/api/admin/employees', authenticateToken, requireAdmin, async (req, re
   try {
     const {
       name, employee_id, email, phone, department, designation,
-      employment_status, joining_date, profile_photo,
+      employment_status, joining_date, profile_photo, role,
       aadhaar_number, aadhaar_front_document, aadhaar_back_document,
       password
     } = req.body;
@@ -988,6 +1149,7 @@ app.post('/api/admin/employees', authenticateToken, requireAdmin, async (req, re
       return res.status(400).json({ error: 'Aadhaar Number must be exactly 12 numeric digits' });
     }
 
+    const assignedRole = ['MANAGER', 'ADMIN'].includes(role) ? role : 'EMPLOYEE';
     const hash = bcrypt.hashSync(password, bcrypt.genSaltSync(10));
     const insertData = {
       name: name.trim(),
@@ -995,7 +1157,7 @@ app.post('/api/admin/employees', authenticateToken, requireAdmin, async (req, re
       email: email.trim().toLowerCase(),
       phone: phone.trim(),
       password_hash: hash,
-      role: 'EMPLOYEE',
+      role: assignedRole,
       department: department.trim(),
       designation: designation.trim(),
       status: 'active',
@@ -1012,7 +1174,7 @@ app.post('/api/admin/employees', authenticateToken, requireAdmin, async (req, re
       .single();
     if (error) throw error;
 
-    await logActivity(req.user.id, req.user.name, 'CREATE_EMPLOYEE', 'USER', newEmp.id, `Created employee: ${name} (ID: ${cleanEid})`);
+    await logActivity(req.user.id, req.user.name, 'CREATE_EMPLOYEE', 'USER', newEmp.id, `Created ${assignedRole.toLowerCase()}: ${name} (ID: ${cleanEid})`);
     res.status(201).json({
       ...newEmp,
       aadhaar_number: cleanAadhaar ? 'XXXX XXXX ' + cleanAadhaar.slice(-4) : '',
@@ -1022,11 +1184,11 @@ app.post('/api/admin/employees', authenticateToken, requireAdmin, async (req, re
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-app.get('/api/admin/employees/:id', authenticateToken, requireAdmin, async (req, res) => {
+app.get('/api/admin/employees/:id', authenticateToken, requireAdminOrManager, async (req, res) => {
   try {
     const { data: emp } = await supabase.from('users')
       .select('id, name, employee_id, email, phone, role, department, designation, status, employment_status, joining_date, profile_photo, aadhaar_number, aadhaar_front_document, aadhaar_back_document, created_at, updated_at')
-      .eq('id', req.params.id).eq('role', 'EMPLOYEE').single();
+      .eq('id', req.params.id).single();
     if (!emp) return res.status(404).json({ error: 'Employee not found' });
     res.json({
       ...emp,
@@ -1142,7 +1304,7 @@ app.put('/api/admin/employees/:id', authenticateToken, requireAdmin, async (req,
 });
 
 // Audit CRM Navigation and Profile Views
-app.post('/api/admin/employees/:id/audit', authenticateToken, requireAdmin, async (req, res) => {
+app.post('/api/admin/employees/:id/audit', authenticateToken, requireAdminOrManager, async (req, res) => {
   try {
     const { action = 'OPEN_EMPLOYEE_CRM', details } = req.body;
     const { data: emp } = await supabase.from('users').select('id, name, employee_id').eq('id', req.params.id).single();
@@ -1150,20 +1312,19 @@ app.post('/api/admin/employees/:id/audit', authenticateToken, requireAdmin, asyn
 
     const logAction = ['OPEN_EMPLOYEE_CRM', 'VIEW_EMPLOYEE_PROFILE'].includes(action) ? action : 'OPEN_EMPLOYEE_CRM';
     const detailMsg = details || (logAction === 'OPEN_EMPLOYEE_CRM'
-      ? `Admin navigated into CRM workspace for employee ${emp.name} (${emp.employee_id})`
-      : `Admin viewed detailed profile for employee ${emp.name} (${emp.employee_id})`);
+      ? `${req.user.role === 'ADMIN' ? 'Admin' : 'Manager'} navigated into CRM workspace for employee ${emp.name} (${emp.employee_id})`
+      : `${req.user.role === 'ADMIN' ? 'Admin' : 'Manager'} viewed detailed profile for employee ${emp.name} (${emp.employee_id})`);
 
     await logActivity(req.user.id, req.user.name, logAction, 'USER', emp.id, detailMsg);
     res.json({ success: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-
 app.put('/api/admin/employees/:id/status', authenticateToken, requireAdmin, async (req, res) => {
   try {
     const { status } = req.body;
     if (!['active', 'inactive'].includes(status)) return res.status(400).json({ error: 'Status must be active or inactive' });
-    await supabase.from('users').update({ status, updated_at: new Date().toISOString() }).eq('id', req.params.id).eq('role', 'EMPLOYEE');
+    await supabase.from('users').update({ status, updated_at: new Date().toISOString() }).eq('id', req.params.id);
     await logActivity(req.user.id, req.user.name, status === 'active' ? 'ACTIVATE_EMPLOYEE' : 'DEACTIVATE_EMPLOYEE', 'USER', req.params.id, `Employee ${status}`);
     const { data: updated } = await supabase.from('users').select('id, name, employee_id, email, status').eq('id', req.params.id).single();
     res.json(updated);
@@ -1175,102 +1336,15 @@ app.put('/api/admin/employees/:id/password', authenticateToken, requireAdmin, as
     const { password } = req.body;
     if (!password || password.length < 6) return res.status(400).json({ error: 'Password must be at least 6 characters' });
     const hash = bcrypt.hashSync(password, bcrypt.genSaltSync(10));
-    await supabase.from('users').update({ password_hash: hash, updated_at: new Date().toISOString() }).eq('id', req.params.id).eq('role', 'EMPLOYEE');
+    await supabase.from('users').update({ password_hash: hash, updated_at: new Date().toISOString() }).eq('id', req.params.id);
     await logActivity(req.user.id, req.user.name, 'RESET_PASSWORD', 'USER', req.params.id, 'Password reset by admin');
     res.json({ success: true, message: 'Password reset successfully' });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// ==================== ADMIN TARGETS & PERFORMANCE ====================
+// ==================== ADMIN / MANAGER TARGETS & PERFORMANCE ====================
 
-async function calculateEmployeeMonthPerformance(emp, monthStr) {
-  const isAllTime = monthStr === 'all';
-  const now = new Date();
-  const defaultMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-  const monthParam = isAllTime ? 'all' : (monthStr || defaultMonth);
-
-  const { data: allLeads1 = [] } = await supabase.from('leads').select('*').eq('assigned_to', emp.id);
-  const { data: allLeads2 = [] } = await supabase.from('leads').select('*').is('assigned_to', null).eq('assigned_consultant', emp.name);
-  const allEmpLeads = [...allLeads1, ...allLeads2];
-
-  let monthNewLeads = 0, monthContacted = 0, monthFollowups = 0, monthConverted = 0, monthLost = 0;
-  const nowMs = Date.now();
-  const aging = { '0_3': 0, '4_7': 0, '8_15': 0, '16_30': 0, '30_plus': 0 };
-
-  allEmpLeads.forEach(l => {
-    const cm = (l.created_at || '').slice(0, 7), im = (l.imported_at || '').slice(0, 7), um = (l.updated_at || '').slice(0, 7);
-    if (isAllTime || cm === monthParam || im === monthParam) monthNewLeads++;
-    if (isAllTime || um === monthParam || cm === monthParam) {
-      if (l.lead_status === 'Contacted') monthContacted++;
-      else if (l.lead_status === 'Follow up' || l.lead_status === 'Interested') monthFollowups++;
-      else if (l.lead_status === 'Converted') monthConverted++;
-      else if (l.lead_status === 'Not Interested') monthLost++;
-    }
-    if (l.created_at) {
-      const days = Math.floor((nowMs - new Date(l.created_at).getTime()) / 86400000);
-      if (days <= 3) aging['0_3']++; else if (days <= 7) aging['4_7']++; else if (days <= 15) aging['8_15']++; else if (days <= 30) aging['16_30']++; else aging['30_plus']++;
-    }
-  });
-
-  const { data: allEmpClients = [] } = await supabase.from('clients').select('*').eq('assigned_consultant', emp.name);
-  let monthClientsCount = 0;
-  allEmpClients.forEach(c => { if (isAllTime || (c.created_at || '').slice(0, 7) === monthParam) monthClientsCount++; });
-
-  const clientNames = allEmpClients.map(c => c.name).filter(Boolean);
-  let monthAgreementsCount = 0;
-  if (clientNames.length > 0) {
-    const { data: agData = [] } = await supabase.from('agreements').select('agreement_date, created_at').in('client_name', clientNames);
-    agData.forEach(a => { if (isAllTime || (a.agreement_date || a.created_at || '').slice(0, 7) === monthParam) monthAgreementsCount++; });
-  }
-
-  let monthCollections = 0;
-  const clientIds = allEmpClients.map(c => c.id).filter(Boolean);
-  if (clientIds.length > 0) {
-    const { data: payments = [] } = await supabase.from('payments').select('amount, payment_date, created_at').in('client_id', clientIds);
-    payments.forEach(p => { if (isAllTime || (p.payment_date || p.created_at || '').slice(0, 7) === monthParam) monthCollections += parseFloat(p.amount) || 0; });
-  }
-  if (monthCollections === 0) allEmpClients.forEach(c => { if (isAllTime || (c.fees_date || c.created_at || '').slice(0, 7) === monthParam) monthCollections += parseFloat(c.this_month_received || c.received_amount) || 0; });
-
-  const { count: actCount = 0 } = await supabase.from('activity_logs').select('*', { count: 'exact', head: true }).eq('user_id', emp.id);
-  const monthFollowupActivities = (actCount || 0) + monthFollowups;
-
-  let targetRow = null;
-  if (!isAllTime) { const { data } = await supabase.from('employee_targets').select('*').eq('employee_id', emp.id).eq('month', monthParam).maybeSingle(); targetRow = data; }
-  const target = targetRow ? { ...targetRow, is_set: true } : { month: monthParam, lead_target: 0, conversion_target: 0, client_target: 0, agreement_target: 0, followup_target: 0, collection_target: 0, is_set: false };
-
-  const getAch = (t, a) => (!target.is_set || t === 0) ? null : parseFloat(((a / t) * 100).toFixed(1));
-  const getSt = (t, a) => { if (!target.is_set || t === 0) return 'Target Not Set'; const p = (a / t) * 100; return p >= 100 ? 'Target Achieved' : p >= 80 ? 'On Track' : p >= 50 ? 'Needs Attention' : 'Critical'; };
-
-  const tva = {
-    leads: { target: target.lead_target, actual: monthNewLeads, achievement: getAch(target.lead_target, monthNewLeads), status: getSt(target.lead_target, monthNewLeads) },
-    conversions: { target: target.conversion_target, actual: monthConverted, achievement: getAch(target.conversion_target, monthConverted), status: getSt(target.conversion_target, monthConverted) },
-    clients: { target: target.client_target, actual: monthClientsCount, achievement: getAch(target.client_target, monthClientsCount), status: getSt(target.client_target, monthClientsCount) },
-    agreements: { target: target.agreement_target, actual: monthAgreementsCount, achievement: getAch(target.agreement_target, monthAgreementsCount), status: getSt(target.agreement_target, monthAgreementsCount) },
-    followups: { target: target.followup_target, actual: monthFollowupActivities, achievement: getAch(target.followup_target, monthFollowupActivities), status: getSt(target.followup_target, monthFollowupActivities) },
-    collections: { target: target.collection_target, actual: monthCollections, achievement: getAch(target.collection_target, monthCollections), status: getSt(target.collection_target, monthCollections) }
-  };
-
-  let perfScore = 0;
-  if (target.is_set) { perfScore = Math.min(100, Math.round(Math.min(tva.leads.achievement || 0, 150) * 0.20 + Math.min(tva.followups.achievement || 0, 150) * 0.15 + Math.min(tva.conversions.achievement || 0, 150) * 0.20 + Math.min(tva.clients.achievement || 0, 150) * 0.10 + Math.min(tva.agreements.achievement || 0, 150) * 0.10 + Math.min(tva.collections.achievement || 0, 150) * 0.25)); }
-  else { const cr = monthNewLeads > 0 ? (monthConverted / monthNewLeads) * 100 : 0; const colR = monthCollections > 0 ? Math.min((monthCollections / 500000) * 100, 100) : 0; perfScore = Math.min(100, Math.round(cr * 0.5 + colR * 0.5)); }
-
-  const ref = (monthParam !== 'all' ? monthParam : defaultMonth).split('-').map(Number);
-  const currD = new Date(ref[0], ref[1] - 1, 1);
-  const trends = [];
-  for (let m = 5; m >= 0; m--) {
-    const d = new Date(currD.getFullYear(), currD.getMonth() - m, 1);
-    const mKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-    let tL = 0, tC = 0;
-    allEmpLeads.forEach(l => { if ((l.created_at || '').startsWith(mKey) || (l.imported_at || '').startsWith(mKey)) tL++; if (l.lead_status === 'Converted' && (l.updated_at || '').startsWith(mKey)) tC++; });
-    const { data: mTgt } = await supabase.from('employee_targets').select('lead_target').eq('employee_id', emp.id).eq('month', mKey).maybeSingle();
-    const tAch = mTgt && mTgt.lead_target > 0 ? Math.round((tL / mTgt.lead_target) * 100) : null;
-    trends.push({ monthKey: mKey, monthName: d.toLocaleString('en-US', { month: 'short', year: 'numeric' }), leads: tL, conversions: tC, achievement: tAch, performance: tAch !== null ? Math.min(100, tAch) : (tL > 0 ? Math.round((tC / tL) * 100) : 0) });
-  }
-
-  return { month: monthParam, target, actuals: { new_leads: monthNewLeads, total_assigned_leads: allEmpLeads.length, contacted: monthContacted, followups: monthFollowupActivities, converted: monthConverted, lost: monthLost, conversion_rate: monthNewLeads > 0 ? parseFloat(((monthConverted / monthNewLeads) * 100).toFixed(1)) : 0, new_clients: monthClientsCount, total_clients: allEmpClients.length, agreements: monthAgreementsCount, collections: monthCollections, performance_score: perfScore }, targetVsActual: tva, leadAging: aging, trends };
-}
-
-app.get('/api/admin/employees/:id/targets', authenticateToken, requireAdmin, async (req, res) => {
+app.get('/api/admin/employees/:id/targets', authenticateToken, requireAdminOrManager, async (req, res) => {
   try {
     const { id } = req.params;
     const { month } = req.query;
@@ -1286,7 +1360,7 @@ app.post('/api/admin/employees/:id/targets', authenticateToken, requireAdmin, as
     const { month, lead_target = 0, conversion_target = 0, client_target = 0, agreement_target = 0, followup_target = 0, collection_target = 0 } = req.body;
     if (!month || !/^\d{4}-\d{2}$/.test(month)) return res.status(400).json({ success: false, error: 'Valid month format (YYYY-MM) is required' });
 
-    const { data: employee } = await supabase.from('users').select('id, name, employee_id').eq('id', id).eq('role', 'EMPLOYEE').single();
+    const { data: employee } = await supabase.from('users').select('id, name, employee_id').eq('id', id).single();
     if (!employee) return res.status(404).json({ success: false, error: 'Employee not found' });
 
     const { data: existing } = await supabase.from('employee_targets').select('*').eq('employee_id', id).eq('month', month).maybeSingle();
@@ -1303,18 +1377,18 @@ app.post('/api/admin/employees/:id/targets', authenticateToken, requireAdmin, as
   } catch (err) { res.status(500).json({ success: false, error: err.message }); }
 });
 
-app.get('/api/admin/targets/history/:employeeId', authenticateToken, requireAdmin, async (req, res) => {
+app.get('/api/admin/targets/history/:employeeId', authenticateToken, requireAdminOrManager, async (req, res) => {
   try {
     const { data: history = [] } = await supabase.from('employee_targets').select('*').eq('employee_id', req.params.employeeId).order('month', { ascending: false });
     res.json({ data: history });
   } catch (err) { res.status(500).json({ success: false, error: err.message }); }
 });
 
-app.get('/api/admin/targets', authenticateToken, requireAdmin, async (req, res) => {
+app.get('/api/admin/targets', authenticateToken, requireAdminOrManager, async (req, res) => {
   try {
     const now = new Date();
     const month = req.query.month || `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-    const { data: activeEmployees = [] } = await supabase.from('users').select('id, name, employee_id, designation, status, profile_photo').eq('role', 'EMPLOYEE').eq('status', 'active').order('name', { ascending: true });
+    const { data: activeEmployees = [] } = await supabase.from('users').select('id, name, employee_id, designation, status, profile_photo').in('role', ['EMPLOYEE', 'MANAGER']).eq('status', 'active').order('name', { ascending: true });
 
     let teamLeadTarget = 0, teamLeadActual = 0, teamConvTarget = 0, teamConvActual = 0, teamColTarget = 0, teamColActual = 0;
     const comparisons = await Promise.all(activeEmployees.map(async emp => {
@@ -1328,11 +1402,11 @@ app.get('/api/admin/targets', authenticateToken, requireAdmin, async (req, res) 
   } catch (err) { res.status(500).json({ success: false, error: err.message }); }
 });
 
-app.get('/api/admin/employees/:id/performance', authenticateToken, requireAdmin, async (req, res) => {
+app.get('/api/admin/employees/:id/performance', authenticateToken, requireAdminOrManager, async (req, res) => {
   try {
     const { id } = req.params;
     const { month } = req.query;
-    const { data: employee } = await supabase.from('users').select('id, name, employee_id, email, phone, role, department, designation, status, employment_status, joining_date, profile_photo, created_at').eq('id', id).eq('role', 'EMPLOYEE').single();
+    const { data: employee } = await supabase.from('users').select('id, name, employee_id, email, phone, role, department, designation, status, employment_status, joining_date, profile_photo, created_at').eq('id', id).single();
     if (!employee) return res.status(404).json({ success: false, error: 'Employee not found' });
     const perfData = await calculateEmployeeMonthPerformance(employee, month);
     const [{ data: recentLeads = [] }, { data: recentActivities = [] }] = await Promise.all([
@@ -1343,19 +1417,19 @@ app.get('/api/admin/employees/:id/performance', authenticateToken, requireAdmin,
   } catch (err) { res.status(500).json({ success: false, error: err.message }); }
 });
 
-app.get('/api/admin/employees/performance', authenticateToken, requireAdmin, async (req, res) => {
+app.get('/api/admin/employees/performance', authenticateToken, requireAdminOrManager, async (req, res) => {
   try {
     const { month } = req.query;
     const now = new Date();
     const monthParam = month || `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-    const { data: employees = [] } = await supabase.from('users').select('id, name, employee_id, email, phone, designation, status, profile_photo').eq('role', 'EMPLOYEE').eq('status', 'active').order('name', { ascending: true });
+    const { data: employees = [] } = await supabase.from('users').select('id, name, employee_id, email, phone, designation, status, profile_photo').in('role', ['EMPLOYEE', 'MANAGER']).eq('status', 'active').order('name', { ascending: true });
     const performanceList = await Promise.all(employees.map(async emp => { const perf = await calculateEmployeeMonthPerformance(emp, monthParam); return { employee: emp, month: monthParam, target: perf.target, actuals: perf.actuals, targetVsActual: perf.targetVsActual }; }));
     res.json({ month: monthParam, data: performanceList });
   } catch (err) { res.status(500).json({ success: false, error: err.message }); }
 });
 
-// Admin Audit Logs
-app.get('/api/admin/audit-logs', authenticateToken, requireAdmin, async (req, res) => {
+// Admin / Manager Audit Logs
+app.get('/api/admin/audit-logs', authenticateToken, requireAdminOrManager, async (req, res) => {
   try {
     const { action, search, page = 1, limit = 50 } = req.query;
     let query = supabase.from('activity_logs').select('*', { count: 'exact' });
@@ -1367,6 +1441,70 @@ app.get('/api/admin/audit-logs', authenticateToken, requireAdmin, async (req, re
     const { data: logs = [], count: total } = await query;
     res.json({ data: logs, pagination: { page: parseInt(page), limit: parseInt(limit), total: total || 0, totalPages: Math.ceil((total || 0) / parseInt(limit)) } });
   } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ==================== ADMIN BACKUP & DISASTER RECOVERY ====================
+
+app.get('/api/admin/backup/export', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const [
+      { data: users = [] },
+      { data: leads = [] },
+      { data: clients = [] },
+      { data: agreements = [] },
+      { data: payments = [] },
+      { data: activityLogs = [] },
+      { data: targets = [] },
+      { data: importHistory = [] }
+    ] = await Promise.all([
+      supabase.from('users').select('id, name, employee_id, email, phone, role, department, designation, status, employment_status, joining_date, profile_photo, created_at, updated_at'),
+      supabase.from('leads').select('*'),
+      supabase.from('clients').select('*'),
+      supabase.from('agreements').select('*'),
+      supabase.from('payments').select('*'),
+      supabase.from('activity_logs').select('*').order('id', { ascending: false }).limit(2000),
+      supabase.from('employee_targets').select('*'),
+      supabase.from('lead_import_history').select('*')
+    ]);
+
+    const backupData = {
+      system: 'SettleXpert CRM',
+      version: '2.5',
+      database_provider: 'Supabase PostgreSQL',
+      exported_at: new Date().toISOString(),
+      exported_by: { id: req.user.id, name: req.user.name, email: req.user.email },
+      total_records: {
+        users: users.length,
+        leads: leads.length,
+        clients: clients.length,
+        agreements: agreements.length,
+        payments: payments.length,
+        activity_logs: activityLogs.length,
+        employee_targets: targets.length,
+        lead_import_history: importHistory.length
+      },
+      database: {
+        users,
+        leads,
+        clients,
+        agreements,
+        payments,
+        activity_logs: activityLogs,
+        employee_targets: targets,
+        lead_import_history: importHistory
+      }
+    };
+
+    const totalCount = Object.values(backupData.total_records).reduce((a, b) => a + b, 0);
+    await logActivity(req.user.id, req.user.name, 'BACKUP_EXPORT', 'SYSTEM', 0, `Full CRM Database Export generated (${totalCount} records exported)`);
+
+    res.setHeader('Content-Type', 'application/json');
+    res.setHeader('Content-Disposition', `attachment; filename="settlexpert_crm_backup_${timestamp}.json"`);
+    res.json(backupData);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // ==================== SEED INITIAL DATA ====================
@@ -1439,9 +1577,102 @@ if (fs.existsSync(distPath)) {
 app.use((err, req, res, next) => { console.error('Express Server Error:', err); res.status(err.status || 500).json({ success: false, error: err.message || 'Internal server error' }); });
 
 
+// ==================== AUTO MIGRATION ON STARTUP ====================
+// Adds extended lead columns if they don't already exist in Supabase.
+// Uses Supabase's information_schema to detect missing columns, then
+// calls a stored procedure (if available) or logs the required SQL.
+async function runLeadColumnMigration() {
+  try {
+    const SUPABASE_URL = process.env.SUPABASE_URL || 'https://izotfjxrpqvgoaoerlbz.supabase.co';
+    const SERVICE_KEY = process.env.SUPABASE_SECRET_KEY || '';
+
+    // Check which columns currently exist in the leads table
+    const { data: colInfo, error: colErr } = await supabase
+      .from('information_schema.columns')
+      .select('column_name')
+      .eq('table_name', 'leads')
+      .eq('table_schema', 'public');
+
+    const existingCols = new Set((colInfo || []).map(c => c.column_name));
+
+    const neededCols = [
+      { name: 'paying_emis',        def: "TEXT DEFAULT NULL" },
+      { name: 'employment_status',  def: "TEXT DEFAULT NULL" },
+      { name: 'employment_type',    def: "TEXT DEFAULT NULL" },
+      { name: 'settlement_needed',  def: "TEXT DEFAULT NULL" },
+      { name: 'consultation_timing',def: "TEXT DEFAULT NULL" },
+      { name: 'credit_card_dues',   def: "TEXT DEFAULT NULL" },
+      { name: 'personal_loan_dues', def: "TEXT DEFAULT NULL" },
+      { name: 'service_fee',        def: "TEXT DEFAULT NULL" }
+    ];
+
+    const missing = neededCols.filter(c => !existingCols.has(c.name));
+    if (missing.length === 0) {
+      console.log('✅ Lead columns: all extended fields present in Supabase.');
+      return;
+    }
+
+    console.log(`⚠️  Missing lead columns detected: ${missing.map(c => c.name).join(', ')}`);
+
+    // Attempt to add via Management API (requires management token in env)
+    const mgmtToken = process.env.SUPABASE_MGMT_TOKEN;
+    if (mgmtToken) {
+      const PROJECT_REF = SUPABASE_URL.replace('https://', '').split('.')[0];
+      const sqlStatements = missing.map(c =>
+        `ALTER TABLE leads ADD COLUMN IF NOT EXISTS ${c.name} ${c.def}`
+      ).join('; ');
+
+      const https = require('https');
+      const body = JSON.stringify({ query: sqlStatements });
+      await new Promise((resolve) => {
+        const req = https.request({
+          hostname: 'api.supabase.com',
+          port: 443,
+          path: `/v1/projects/${PROJECT_REF}/database/query`,
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${mgmtToken}`,
+            'Content-Length': Buffer.byteLength(body)
+          }
+        }, (res) => {
+          let d = '';
+          res.on('data', chunk => d += chunk);
+          res.on('end', () => {
+            if (res.statusCode === 200 || res.statusCode === 204) {
+              console.log('✅ Auto-migration via Management API: extended lead columns added!');
+            } else {
+              console.log('⚠️  Management API migration failed:', res.statusCode, d);
+              printMigrationSQL(missing);
+            }
+            resolve();
+          });
+        });
+        req.on('error', () => { printMigrationSQL(missing); resolve(); });
+        req.write(body);
+        req.end();
+      });
+    } else {
+      printMigrationSQL(missing);
+    }
+  } catch (err) {
+    console.log('ℹ️  Auto-migration check skipped:', err.message);
+  }
+}
+
+function printMigrationSQL(missing) {
+  console.log('\n📋 ACTION REQUIRED — Run this SQL in Supabase SQL Editor:');
+  console.log('   https://supabase.com/dashboard/project/izotfjxrpqvgoaoerlbz/sql\n');
+  missing.forEach(c => {
+    console.log(`   ALTER TABLE leads ADD COLUMN IF NOT EXISTS ${c.name} ${c.def};`);
+  });
+  console.log('\n   (These columns store extra lead form fields. Core fields still save correctly without them.)\n');
+}
+
 // ==================== START ====================
 app.listen(PORT, '0.0.0.0', async () => {
   console.log(`\n🌐 SettleXpert CRM Backend (Supabase) running on http://0.0.0.0:${PORT}`);
   console.log(`📦 Connected to Supabase: ${process.env.SUPABASE_URL || 'https://izotfjxrpqvgoaoerlbz.supabase.co'}\n`);
-  await seedIfEmpty();
+  await runLeadColumnMigration();
 });
+
