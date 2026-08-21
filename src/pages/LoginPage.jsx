@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Eye, EyeOff, Lock, Mail, ShieldCheck } from 'lucide-react';
 import SettleXpertLogo from '../components/SettleXpertLogo';
 
-export default function LoginPage({ onLoginSuccess }) {
+export default function LoginPage({ onLoginSuccess, onLogin }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -38,7 +38,10 @@ export default function LoginPage({ onLoginSuccess }) {
 
       localStorage.setItem('crm_token', data.token);
       localStorage.setItem('crm_user', JSON.stringify(data.user));
-      onLoginSuccess(data.user);
+      const callback = onLoginSuccess || onLogin;
+      if (typeof callback === 'function') {
+        callback(data.user);
+      }
     } catch (err) {
       setError(err.message || 'Invalid credentials');
     } finally {
