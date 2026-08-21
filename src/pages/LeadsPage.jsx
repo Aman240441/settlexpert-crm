@@ -56,9 +56,9 @@ export default function LeadsPage({
       params.append('page', pagination.page);
       params.append('limit', pagination.limit);
 
-      // Employee data isolation
-      if (user && user.role === 'EMPLOYEE') {
-        params.append('assigned_to', user.name);
+      // Employee data isolation / Manager filter
+      if (user && (user.role === 'EMPLOYEE' || user.isFiltered)) {
+        params.append('assigned_to', user.filterName || user.name);
       }
 
       const token = localStorage.getItem('crm_token');
