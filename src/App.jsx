@@ -57,6 +57,19 @@ export default function App() {
   const [leadFilterStatus, setLeadFilterStatus] = useState('All');
   const [clientFilterStatus, setClientFilterStatus] = useState('Active');
   const [clientReturnPage, setClientReturnPage] = useState('clients');
+  const [managerPortalMode, setManagerPortalMode] = useState(user?.role === 'ADMIN');
+  const [managerFilterEmp, setManagerFilterEmp] = useState(null);
+  const [employeesList, setEmployeesList] = useState([]);
+
+  useEffect(() => {
+    if (user && (user.role === 'ADMIN' || user.role === 'MANAGER')) {
+      fetch('/api/admin/employees', { headers: authHeaders() })
+        .then(r => r.json())
+        .then(d => setEmployeesList(d.data || []))
+        .catch(() => {});
+    }
+  }, [user?.id, user?.role]);
+
   const [leadModal, setLeadModal] = useState({ isOpen: false, lead: null, isViewOnly: false });
   const [followUpModal, setFollowUpModal] = useState({ isOpen: false, lead: null });
   const [clientModal, setClientModal] = useState({ isOpen: false, client: null, isViewOnly: false });
@@ -117,6 +130,7 @@ export default function App() {
     setUser(null);
     setAdminViewEmployee(null);
     setCrmViewEmployee(null);
+    setManagerFilterEmp(null);
     showToast('Logged out successfully');
   };
 
@@ -130,13 +144,14 @@ export default function App() {
       await fetch(`/api/admin/employees/${emp.id}/audit`, {
         method: 'POST',
         headers: authHeaders(),
-        body: JSON.stringify({ action: 'OPEN_EMPLOYEE_CRM', details: `Admin opened CRM workspace for ${emp.name} (${emp.employee_id})` })
+        body: JSON.stringify({ action: 'OPEN_EMPLOYEE_CRM', details: `${user.role === 'ADMIN' ? 'Admin' : 'Manager'} opened CRM workspace for ${emp.name} (${emp.employee_id})` })
       });
     } catch (e) {
       console.error('Failed to log Open CRM audit:', e);
     }
     setCrmViewEmployee(emp);
     setAdminViewEmployee(null);
+    setManagerPortalMode(false);
     setCurrentPage('dashboard');
     showToast(`Opened CRM workspace as ${emp.name}`);
   };
@@ -144,14 +159,16 @@ export default function App() {
   // ================= LEAD ACTIONS =================
   const handleSaveLead = async (formData) => {
     try {
-      const isEdit = !!leadModal.lead?.id;
-      const url = isEdit ? `/api/leads/${leadModal.lead.id}` : '/api/leads';
+      const leadId = formData.id || leadModal.lead?.id;
+      const isEdit = !!leadId;
+      const url = isEdit ? `/api/leads/${leadId}` : '/api/leads';
       const method = isEdit ? 'PUT' : 'POST';
 
       const payload = { ...formData };
-      if (!isEdit && crmViewEmployee) {
-        payload.assigned_to = crmViewEmployee.id;
-        payload.assigned_consultant = crmViewEmployee.name;
+      const targetEmp = crmViewEmployee || managerFilterEmp;
+      if (!isEdit && targetEmp) {
+        payload.assigned_to = targetEmp.id;
+        payload.assigned_consultant = targetEmp.name;
       }
 
       const res = await fetch(url, {
@@ -160,7 +177,10 @@ export default function App() {
         body: JSON.stringify(payload)
       });
 
-      if (!res.ok) throw new Error('Failed to save lead');
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || 'Failed to save lead');
+      }
       setLeadModal({ isOpen: false, lead: null, isViewOnly: false });
       setRefreshKey(k => k + 1);
       showToast(isEdit ? 'Lead updated successfully' : 'Lead created successfully');
@@ -190,9 +210,10 @@ export default function App() {
       const method = isEdit ? 'PUT' : 'POST';
 
       const payload = { ...formData };
-      if (!isEdit && crmViewEmployee) {
-        payload.assigned_to = crmViewEmployee.id;
-        payload.assigned_consultant = crmViewEmployee.name;
+      const targetEmp = crmViewEmployee || managerFilterEmp;
+      if (!isEdit && targetEmp) {
+        payload.assigned_to = targetEmp.id;
+        payload.assigned_consultant = targetEmp.name;
       }
 
       const res = await fetch(url, {
@@ -204,7 +225,7 @@ export default function App() {
       if (!res.ok) throw new Error('Failed to save client');
       setClientModal({ isOpen: false, client: null, isViewOnly: false });
       setRefreshKey(k => k + 1);
-      showToast(isEdit ? 'Client profile updated' : 'New client added successfully');
+      showToast(isEdit ? 'Client updated successfully' : 'Client created successfully');
     } catch (err) {
       showToast(err.message, 'error');
     }
@@ -225,20 +246,14 @@ export default function App() {
   // ================= AGREEMENT ACTIONS =================
   const handleSaveAgreement = async (formData) => {
     try {
-      const isEdit = !!agreementModal.agreement?.id;
-      const url = isEdit ? `/api/agreements/${agreementModal.agreement.id}` : '/api/agreements';
+      const isEdit = Boolean(formData.id);
+      const url = isEdit ? `/api/agreements/${formData.id}` : '/api/agreements';
       const method = isEdit ? 'PUT' : 'POST';
-
-      const payload = { ...formData };
-      if (!isEdit && crmViewEmployee) {
-        payload.assigned_to = crmViewEmployee.id;
-        payload.assigned_consultant = crmViewEmployee.name;
-      }
 
       const res = await fetch(url, {
         method,
         headers: authHeaders(),
-        body: JSON.stringify(payload)
+        body: JSON.stringify(formData)
       });
 
       if (!res.ok) throw new Error('Failed to save agreement');
@@ -257,6 +272,42 @@ export default function App() {
       if (!res.ok) throw new Error('Failed to delete agreement');
       setRefreshKey(k => k + 1);
       showToast('Agreement deleted successfully');
+    } catch (err) {
+      showToast(err.message, 'error');
+    }
+  };
+
+  // ================= PAYMENT ACTIONS =================
+  const handleRecordPayment = async (paymentData) => {
+    try {
+      const res = await fetch('/api/payments', {
+        method: 'POST',
+        headers: authHeaders(),
+        body: JSON.stringify(paymentData)
+      });
+      if (!res.ok) throw new Error('Failed to record payment');
+      setRecordPaymentModal({ isOpen: false, client: null });
+      setRefreshKey(k => k + 1);
+      showToast('Payment recorded successfully');
+    } catch (err) {
+      showToast(err.message, 'error');
+    }
+  };
+
+  // ================= LEAD CONVERSION =================
+  const handleConvertLead = async (convertData) => {
+    try {
+      const { leadId, ...rest } = convertData;
+      const res = await fetch(`/api/leads/${leadId}/convert`, {
+        method: 'POST',
+        headers: authHeaders(),
+        body: JSON.stringify(rest)
+      });
+      if (!res.ok) throw new Error('Failed to convert lead');
+      setConvertLeadModal({ isOpen: false, lead: null });
+      setRefreshKey(k => k + 1);
+      showToast('Lead converted to client successfully');
+      setCurrentPage('clients');
     } catch (err) {
       showToast(err.message, 'error');
     }
@@ -282,68 +333,75 @@ export default function App() {
     }
   };
 
-  // If not logged in, render Login Page
+  // ================= RENDER =================
   if (!user) {
-    return <LoginPage onLoginSuccess={(u) => setUser(u)} />;
+    return <LoginPage onLogin={setUser} />;
   }
 
-  // ================= ADMIN PANEL =================
-  if (user.role === 'ADMIN' && !crmViewEmployee) {
-    // Admin viewing employee detail
+  // ================= ADMIN / MANAGER PORTAL ROUTING =================
+  if (((user.role === 'ADMIN' && managerPortalMode) || (user.role === 'MANAGER' && managerPortalMode)) && !crmViewEmployee) {
     if (adminViewEmployee) {
       return (
         <div className="admin-layout">
-          <div className="admin-main" style={{ marginLeft: 0, width: '100%' }}>
-            <div className="admin-content-area">
+          <div className="admin-main" style={{ width: '100%' }}>
+            <div className="admin-content-area" style={{ padding: '24px 32px' }}>
               <AdminEmployeeDetailPage
                 employee={adminViewEmployee}
+                user={user}
                 onBack={() => setAdminViewEmployee(null)}
                 onOpenCRM={handleOpenCRM}
-                onEditEmployee={(emp) => setEditEmployeeModalTarget(emp)}
+                onEditEmployee={user.role === 'ADMIN' ? (emp) => setEditEmployeeModalTarget(emp) : null}
               />
-              <CreateEmployeeModal
-                isOpen={Boolean(editEmployeeModalTarget)}
-                employee={editEmployeeModalTarget}
-                onClose={() => setEditEmployeeModalTarget(null)}
-                onSave={(updated) => {
-                  setEditEmployeeModalTarget(null);
-                  setAdminViewEmployee(prev => ({ ...prev, ...updated }));
-                  showToast('Employee profile updated!');
-                }}
-              />
+              {user.role === 'ADMIN' && (
+                <CreateEmployeeModal
+                  isOpen={Boolean(editEmployeeModalTarget)}
+                  employee={editEmployeeModalTarget}
+                  onClose={() => setEditEmployeeModalTarget(null)}
+                  onSave={(updated) => {
+                    setEditEmployeeModalTarget(null);
+                    setAdminViewEmployee(prev => ({ ...prev, ...updated }));
+                    showToast('Employee profile updated!');
+                  }}
+                />
+              )}
             </div>
           </div>
         </div>
       );
     }
 
-    // Admin Panel
     return (
       <AdminPanelPage
         user={user}
         onLogout={handleLogout}
         onViewEmployee={(emp) => setAdminViewEmployee(emp)}
-        onOpenCRM={handleOpenCRM}
+        onOpenCRM={(emp) => {
+          setManagerPortalMode(false);
+          handleOpenCRM(emp);
+        }}
       />
     );
   }
 
-  const effectiveUser = crmViewEmployee ? { ...crmViewEmployee, role: 'EMPLOYEE', isImpersonated: true } : user;
+  const effectiveUser = crmViewEmployee
+    ? { ...crmViewEmployee, role: 'EMPLOYEE', isImpersonated: true, originalRole: user.role }
+    : managerFilterEmp
+    ? { ...managerFilterEmp, role: user.role, isFiltered: true, filterName: managerFilterEmp.name }
+    : { ...user, isManagerAll: true };
 
-  // ================= EMPLOYEE CRM (SCOPED OR NATIVE) =================
+  // ================= FULL CRM WORKSPACE =================
   return (
     <div className="app-container">
-      {/* Sidebar Navigation */}
       <Sidebar
         currentPage={currentPage}
         setCurrentPage={setCurrentPage}
         isMobileOpen={isMobileOpen}
         setIsMobileOpen={setIsMobileOpen}
+        user={user}
+        onToggleViewMode={() => setManagerPortalMode(prev => !prev)}
       />
 
-      {/* Main Content Wrapper */}
       <div className="main-wrapper">
-        {/* Admin viewing Employee CRM Workspace Context Banner */}
         {crmViewEmployee && (
           <div className="crm-admin-context-banner">
             <div className="crm-admin-banner-left">
@@ -359,9 +417,6 @@ export default function App() {
                   Viewing CRM Workspace as: <strong>{crmViewEmployee.name}</strong>
                   <span className="crm-admin-banner-badge">{crmViewEmployee.employee_id || 'SE-000'}</span>
                 </div>
-                <div className="crm-admin-banner-subtitle">
-                  {crmViewEmployee.designation || 'Consultant'} • {crmViewEmployee.department || 'Sales'} — Workspace data filtered & auto-assignment active
-                </div>
               </div>
             </div>
             <div className="crm-admin-banner-actions">
@@ -373,14 +428,14 @@ export default function App() {
                   setCrmViewEmployee(null);
                 }}
               >
-                View Profile & Targets
+                View Profile
               </button>
               <button
                 type="button"
                 className="crm-admin-btn-exit"
                 onClick={() => setCrmViewEmployee(null)}
               >
-                Return to Admin Panel
+                {user.role === 'ADMIN' ? 'Return to Admin Panel' : 'Exit Employee Workspace'}
               </button>
             </div>
           </div>
@@ -390,9 +445,17 @@ export default function App() {
           user={effectiveUser}
           onLogout={handleLogout}
           toggleSidebar={() => setIsMobileOpen(!isMobileOpen)}
+          employees={employeesList}
+          selectedEmployee={crmViewEmployee || managerFilterEmp}
+          onSelectEmployee={(emp) => {
+            setCrmViewEmployee(null);
+            setManagerFilterEmp(emp);
+            setRefreshKey(k => k + 1);
+            showToast(emp ? `Filtered CRM to ${emp.name}` : 'Showing all team CRM records');
+          }}
+          onToggleViewMode={() => setManagerPortalMode(prev => !prev)}
         />
 
-        {/* Dynamic Pages */}
         {currentPage === 'dashboard' && (
           <DashboardPage
             key={refreshKey}
@@ -421,7 +484,7 @@ export default function App() {
               setClientReturnPage('dashboard');
               setCurrentPage('add_lender');
             }}
-            onDeleteClient={handleDeleteClient}
+            onDeleteClient={user.role === 'ADMIN' ? handleDeleteClient : undefined}
             onPayClient={(c) => setRecordPaymentModal({ isOpen: true, client: c })}
           />
         )}
@@ -445,7 +508,7 @@ export default function App() {
               setCreateAgreementLead(l);
               setCurrentPage('create_agreement');
             }}
-            onDeleteLead={handleDeleteLead}
+            onDeleteLead={user.role === 'ADMIN' ? handleDeleteLead : undefined}
             onConvertLead={(l) => setConvertLeadModal({ isOpen: true, lead: l })}
           />
         )}
@@ -455,8 +518,54 @@ export default function App() {
             lead={editLeadData}
             onBack={() => setCurrentPage('leads')}
             onSaveLead={async (updatedLead) => {
-              await handleSaveLead(updatedLead);
-              setCurrentPage('leads');
+              try {
+                // Always PUT using the lead's existing database ID
+                if (!updatedLead.id) {
+                  showToast('Error: Lead ID missing — cannot update.', 'error');
+                  return;
+                }
+                const res = await fetch(`/api/leads/${updatedLead.id}`, {
+                  method: 'PUT',
+                  headers: authHeaders(),
+                  body: JSON.stringify(updatedLead)
+                });
+                if (!res.ok) {
+                  const errData = await res.json().catch(() => ({}));
+                  throw new Error(errData.error || 'Failed to update lead');
+                }
+
+                // If status changed to Converted, trigger conversion ONCE
+                // (backend checks for existing client to prevent duplicates)
+                if (updatedLead.lead_status === 'Converted') {
+                  const convRes = await fetch(`/api/leads/${updatedLead.id}/convert`, {
+                    method: 'POST',
+                    headers: authHeaders(),
+                    body: JSON.stringify({
+                      service_fee: updatedLead.service_fee || 25000,
+                      paid_amount: 0,
+                      payment_method: 'UPI',
+                      notes: `Converted to Client from Lead Edit`
+                    })
+                  });
+                  if (convRes.ok) {
+                    setRefreshKey(k => k + 1);
+                    setClientFilterStatus('Active');
+                    setCurrentPage('clients');
+                    showToast(`Lead ${updatedLead.name} converted to Client!`);
+                    return;
+                  }
+                  // If conversion fails (e.g. already converted), still go to leads
+                  const convErr = await convRes.json().catch(() => ({}));
+                  showToast(convErr.error || 'Lead updated. Conversion skipped (already converted).', 'info');
+                } else {
+                  showToast('Lead updated successfully');
+                }
+
+                setRefreshKey(k => k + 1);
+                setCurrentPage('leads');
+              } catch (err) {
+                showToast(err.message, 'error');
+              }
             }}
           />
         )}
@@ -528,7 +637,7 @@ export default function App() {
               setCurrentPage('add_lender');
             }}
             onPayClient={(c) => setRecordPaymentModal({ isOpen: true, client: c })}
-            onDeleteClient={handleDeleteClient}
+            onDeleteClient={user.role === 'ADMIN' ? handleDeleteClient : undefined}
             onOpenBulkMail={(selected) => setBulkMailModal({ isOpen: true, selectedClients: selected })}
           />
         )}
@@ -629,7 +738,7 @@ export default function App() {
               } catch (e) { }
               setAgreementPreviewModal({ isOpen: true, agreement: a });
             }}
-            onDeleteAgreement={handleDeleteAgreement}
+            onDeleteAgreement={user.role === 'ADMIN' ? handleDeleteAgreement : undefined}
           />
         )}
 
