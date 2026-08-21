@@ -107,7 +107,7 @@ app.post('/api/auth/login', async (req, res) => {
     await logActivity(user.id, user.name, 'LOGIN', 'USER', user.id, `${user.role} logged in successfully`);
     return res.json({
       token,
-      user: { id: user.id, email: user.email, name: user.name, role: user.role, employee_id: user.employee_id || '', department: user.department || '', designation: user.designation || '', phone: user.phone || '' }
+      user: { id: user.id, email: user.email, name: user.name, role: user.role, employee_id: user.employee_id || '', department: user.department || '', designation: user.designation || '', phone: user.phone || '', profile_photo: user.profile_photo || '' }
     });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -701,7 +701,7 @@ app.get('/api/admin/dashboard', authenticateToken, requireAdmin, async (req, res
     const { data: allClients = [] } = await supabase.from('clients').select('received_amount');
     const totalCollections = allClients.reduce((sum, c) => sum + (c.received_amount || 0), 0);
 
-    const { data: employees = [] } = await supabase.from('users').select('id, name, employee_id, designation, department, status').eq('role', 'EMPLOYEE').order('name', { ascending: true });
+    const { data: employees = [] } = await supabase.from('users').select('id, name, employee_id, designation, department, status, profile_photo').eq('role', 'EMPLOYEE').order('name', { ascending: true });
     const employeeWorkload = [];
     let totalPerf = 0, perfCount = 0;
 
@@ -715,7 +715,7 @@ app.get('/api/admin/dashboard', authenticateToken, requireAdmin, async (req, res
       const totalCol = colData.reduce((s, c) => s + (c.received_amount || 0), 0);
       const perf = (lc || 0) > 0 ? Math.round(((cc || 0) / (lc || 1)) * 100) : 0;
       if ((lc || 0) > 0) { totalPerf += perf; perfCount++; }
-      employeeWorkload.push({ id: emp.id, name: emp.name, employee_id: emp.employee_id, designation: emp.designation, department: emp.department, assigned_leads: lc || 0, pending_leads: 0, converted_leads: cc || 0, lost_leads: lost || 0, collections: totalCol, performance: perf, status: emp.status });
+      employeeWorkload.push({ id: emp.id, name: emp.name, employee_id: emp.employee_id, designation: emp.designation, department: emp.department, profile_photo: emp.profile_photo || '', assigned_leads: lc || 0, pending_leads: 0, converted_leads: cc || 0, lost_leads: lost || 0, collections: totalCol, performance: perf, status: emp.status });
     }
     const avgPerformance = perfCount > 0 ? Math.round(totalPerf / perfCount) : 0;
     const topPerformers = [...employeeWorkload].filter(e => e.status === 'active').sort((a, b) => (b.performance * 1000 + b.collections) - (a.performance * 1000 + a.collections)).slice(0, 5);
@@ -938,7 +938,9 @@ app.get('/api/admin/leads/import/:batchId', authenticateToken, requireAdmin, asy
 
 app.get('/api/admin/employees', authenticateToken, requireAdmin, async (req, res) => {
   try {
-    const { data: employees = [] } = await supabase.from('users').select('id, name, employee_id, email, phone, role, department, designation, status, created_at, updated_at').eq('role', 'EMPLOYEE').order('id', { ascending: false });
+    const { data: employees = [] } = await supabase.from('users')
+      .select('id, name, employee_id, email, phone, role, department, designation, status, employment_status, joining_date, profile_photo, created_at, updated_at')
+      .eq('role', 'EMPLOYEE').order('id', { ascending: false });
     const enriched = await Promise.all(employees.map(async emp => {
       const [{ count: lc }, { count: clients }, { data: colData = [] }, { count: cc }] = await Promise.all([
         supabase.from('leads').select('*', { count: 'exact', head: true }).eq('assigned_consultant', emp.name),
@@ -1312,7 +1314,7 @@ app.get('/api/admin/targets', authenticateToken, requireAdmin, async (req, res) 
   try {
     const now = new Date();
     const month = req.query.month || `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-    const { data: activeEmployees = [] } = await supabase.from('users').select('id, name, employee_id, designation, status').eq('role', 'EMPLOYEE').eq('status', 'active').order('name', { ascending: true });
+    const { data: activeEmployees = [] } = await supabase.from('users').select('id, name, employee_id, designation, status, profile_photo').eq('role', 'EMPLOYEE').eq('status', 'active').order('name', { ascending: true });
 
     let teamLeadTarget = 0, teamLeadActual = 0, teamConvTarget = 0, teamConvActual = 0, teamColTarget = 0, teamColActual = 0;
     const comparisons = await Promise.all(activeEmployees.map(async emp => {
@@ -1320,7 +1322,7 @@ app.get('/api/admin/targets', authenticateToken, requireAdmin, async (req, res) 
       teamLeadTarget += perf.target.lead_target || 0; teamLeadActual += perf.actuals.new_leads || 0;
       teamConvTarget += perf.target.conversion_target || 0; teamConvActual += perf.actuals.converted || 0;
       teamColTarget += perf.target.collection_target || 0; teamColActual += perf.actuals.collections || 0;
-      return { employee_id: emp.id, name: emp.name, employee_code: emp.employee_id, designation: emp.designation, lead_target: perf.target.lead_target, lead_actual: perf.actuals.new_leads, lead_achievement: perf.targetVsActual.leads.achievement, lead_status: perf.targetVsActual.leads.status, conversion_target: perf.target.conversion_target, conversion_actual: perf.actuals.converted, conversion_achievement: perf.targetVsActual.conversions.achievement, collection_target: perf.target.collection_target, collection_actual: perf.actuals.collections, collection_achievement: perf.targetVsActual.collections.achievement, performance_score: perf.actuals.performance_score, is_target_set: perf.target.is_set };
+      return { employee_id: emp.id, name: emp.name, employee_code: emp.employee_id, designation: emp.designation, profile_photo: emp.profile_photo || '', lead_target: perf.target.lead_target, lead_actual: perf.actuals.new_leads, lead_achievement: perf.targetVsActual.leads.achievement, lead_status: perf.targetVsActual.leads.status, conversion_target: perf.target.conversion_target, conversion_actual: perf.actuals.converted, conversion_achievement: perf.targetVsActual.conversions.achievement, collection_target: perf.target.collection_target, collection_actual: perf.actuals.collections, collection_achievement: perf.targetVsActual.collections.achievement, performance_score: perf.actuals.performance_score, is_target_set: perf.target.is_set };
     }));
     res.json({ month, team_summary: { total_employees: activeEmployees.length, lead_target: teamLeadTarget, lead_actual: teamLeadActual, lead_achievement: teamLeadTarget > 0 ? parseFloat(((teamLeadActual / teamLeadTarget) * 100).toFixed(1)) : 0, conversion_target: teamConvTarget, conversion_actual: teamConvActual, conversion_achievement: teamConvTarget > 0 ? parseFloat(((teamConvActual / teamConvTarget) * 100).toFixed(1)) : 0, collection_target: teamColTarget, collection_actual: teamColActual, collection_achievement: teamColTarget > 0 ? parseFloat(((teamColActual / teamColTarget) * 100).toFixed(1)) : 0 }, comparisons });
   } catch (err) { res.status(500).json({ success: false, error: err.message }); }
@@ -1330,7 +1332,7 @@ app.get('/api/admin/employees/:id/performance', authenticateToken, requireAdmin,
   try {
     const { id } = req.params;
     const { month } = req.query;
-    const { data: employee } = await supabase.from('users').select('id, name, employee_id, email, phone, role, department, designation, status, created_at').eq('id', id).eq('role', 'EMPLOYEE').single();
+    const { data: employee } = await supabase.from('users').select('id, name, employee_id, email, phone, role, department, designation, status, employment_status, joining_date, profile_photo, created_at').eq('id', id).eq('role', 'EMPLOYEE').single();
     if (!employee) return res.status(404).json({ success: false, error: 'Employee not found' });
     const perfData = await calculateEmployeeMonthPerformance(employee, month);
     const [{ data: recentLeads = [] }, { data: recentActivities = [] }] = await Promise.all([
@@ -1346,7 +1348,7 @@ app.get('/api/admin/employees/performance', authenticateToken, requireAdmin, asy
     const { month } = req.query;
     const now = new Date();
     const monthParam = month || `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-    const { data: employees = [] } = await supabase.from('users').select('id, name, employee_id, email, phone, designation, status').eq('role', 'EMPLOYEE').eq('status', 'active').order('name', { ascending: true });
+    const { data: employees = [] } = await supabase.from('users').select('id, name, employee_id, email, phone, designation, status, profile_photo').eq('role', 'EMPLOYEE').eq('status', 'active').order('name', { ascending: true });
     const performanceList = await Promise.all(employees.map(async emp => { const perf = await calculateEmployeeMonthPerformance(emp, monthParam); return { employee: emp, month: monthParam, target: perf.target, actuals: perf.actuals, targetVsActual: perf.targetVsActual }; }));
     res.json({ month: monthParam, data: performanceList });
   } catch (err) { res.status(500).json({ success: false, error: err.message }); }

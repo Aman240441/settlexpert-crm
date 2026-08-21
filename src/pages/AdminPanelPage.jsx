@@ -520,7 +520,13 @@ export default function AdminPanelPage({ user, onLogout, onViewEmployee, onOpenC
                         <tr key={c.employee_id}>
                           <td>
                             <div className="admin-emp-cell" style={{ cursor: 'pointer' }} onClick={() => onViewEmployee(empObj)}>
-                              <div className="admin-emp-avatar">{c.name?.charAt(0)?.toUpperCase()}</div>
+                              {empObj.profile_photo || c.profile_photo ? (
+                                <div style={{ width: '34px', height: '34px', borderRadius: '50%', overflow: 'hidden', border: '1.5px solid #38bdf8', flexShrink: 0 }}>
+                                  <img src={empObj.profile_photo || c.profile_photo} alt={c.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                </div>
+                              ) : (
+                                <div className="admin-emp-avatar">{c.name?.charAt(0)?.toUpperCase()}</div>
+                              )}
                               <div>
                                 <div className="admin-emp-name">{c.name}</div>
                                 <div className="admin-emp-email">{c.employee_code || c.designation || 'Consultant'}</div>
@@ -581,8 +587,21 @@ export default function AdminPanelPage({ user, onLogout, onViewEmployee, onOpenC
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px' }}>
               {topPerformers.map((emp, rank) => (
                 <div key={emp.id} className="admin-perf-metric" style={{ cursor: 'pointer' }} onClick={() => onViewEmployee(emp)}>
-                  <div style={{ width: '28px', height: '28px', borderRadius: '50%', background: rank === 0 ? '#fbbf24' : rank === 1 ? '#cbd5e1' : '#f59e0b', color: '#0f172a', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: '12px' }}>
-                    #{rank + 1}
+                  <div style={{ position: 'relative', width: '32px', height: '32px', flexShrink: 0 }}>
+                    {emp.profile_photo ? (
+                      <div style={{ width: '32px', height: '32px', borderRadius: '50%', overflow: 'hidden', border: rank === 0 ? '1.5px solid #fbbf24' : '1.5px solid #38bdf8' }}>
+                        <img src={emp.profile_photo} alt={emp.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      </div>
+                    ) : (
+                      <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: rank === 0 ? '#fbbf24' : rank === 1 ? '#cbd5e1' : '#f59e0b', color: '#0f172a', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: '12px' }}>
+                        #{rank + 1}
+                      </div>
+                    )}
+                    {emp.profile_photo && (
+                      <div style={{ position: 'absolute', bottom: '-2px', right: '-2px', width: '15px', height: '15px', borderRadius: '50%', background: rank === 0 ? '#fbbf24' : rank === 1 ? '#cbd5e1' : '#f59e0b', color: '#0f172a', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: '9px', border: '1px solid #0f172a' }}>
+                        {rank + 1}
+                      </div>
+                    )}
                   </div>
                   <div style={{ flex: 1 }}>
                     <div style={{ fontWeight: 600, color: '#e2e8f0', fontSize: '13px' }}>{emp.name}</div>
@@ -639,7 +658,13 @@ export default function AdminPanelPage({ user, onLogout, onViewEmployee, onOpenC
                     <tr key={emp.id} className="admin-table-row-click" onClick={() => onViewEmployee(emp)}>
                       <td>
                         <div className="admin-emp-cell">
-                          <div className="admin-emp-avatar">{emp.name?.charAt(0)?.toUpperCase()}</div>
+                          {emp.profile_photo ? (
+                            <div style={{ width: '34px', height: '34px', borderRadius: '50%', overflow: 'hidden', border: '1.5px solid #38bdf8', flexShrink: 0 }}>
+                              <img src={emp.profile_photo} alt={emp.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                            </div>
+                          ) : (
+                            <div className="admin-emp-avatar">{emp.name?.charAt(0)?.toUpperCase()}</div>
+                          )}
                           <div>
                             <div className="admin-emp-name">{emp.name}</div>
                             <div className="admin-emp-email">{emp.designation || 'Consultant'}</div>
@@ -891,6 +916,7 @@ export default function AdminPanelPage({ user, onLogout, onViewEmployee, onOpenC
                   {adminLeads.map(lead => {
                     const isAssigned = !!(lead.assigned_to || (lead.assigned_consultant && lead.assigned_consultant !== ''));
                     const empDisplayName = lead.employee_name || lead.assigned_consultant;
+                    const assignedEmpObj = employees.find(e => e.id === lead.assigned_to || e.name?.toLowerCase() === empDisplayName?.toLowerCase());
 
                     return (
                       <tr key={lead.id} className={selectedLeads.includes(lead.id) ? 'selected-row' : ''}>
@@ -929,9 +955,15 @@ export default function AdminPanelPage({ user, onLogout, onViewEmployee, onOpenC
                         <td>
                           {isAssigned ? (
                             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                              <div className="admin-emp-avatar" style={{ width: '24px', height: '24px', fontSize: '11px' }}>
-                                {empDisplayName?.charAt(0)?.toUpperCase()}
-                              </div>
+                              {assignedEmpObj?.profile_photo ? (
+                                <div style={{ width: '24px', height: '24px', borderRadius: '50%', overflow: 'hidden', border: '1px solid #38bdf8', flexShrink: 0 }}>
+                                  <img src={assignedEmpObj.profile_photo} alt={empDisplayName} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                </div>
+                              ) : (
+                                <div className="admin-emp-avatar" style={{ width: '24px', height: '24px', fontSize: '11px' }}>
+                                  {empDisplayName?.charAt(0)?.toUpperCase()}
+                                </div>
+                              )}
                               <div>
                                 <div style={{ fontSize: '12.5px', fontWeight: 600, color: '#e2e8f0' }}>{empDisplayName}</div>
                                 {lead.employee_code && (
