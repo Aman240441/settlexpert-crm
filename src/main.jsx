@@ -7,7 +7,8 @@ import './admin.css';
 // Global fetch interceptor to attach JWT token and route to live API if in native app or configured
 const DEFAULT_PROD_API = 'https://settlexpertcrm-api.onrender.com';
 const isNative = typeof window !== 'undefined' && (window.location.protocol === 'capacitor:' || window.location.protocol === 'ionic:' || window.Capacitor?.isNativePlatform());
-const API_BASE = (import.meta.env.VITE_API_URL || (isNative ? DEFAULT_PROD_API : '')).replace(/\/$/, '');
+const isLocal = typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+const API_BASE = (import.meta.env.VITE_API_URL || (isNative || !isLocal ? DEFAULT_PROD_API : '')).replace(/\/$/, '');
 const originalFetch = window.fetch;
 window.fetch = async (url, options = {}) => {
   let targetUrl = url;
