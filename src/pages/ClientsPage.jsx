@@ -7,7 +7,8 @@ import {
   Landmark,
   Mail,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  IndianRupee
 } from 'lucide-react';
 import AddLenderModal from '../components/AddLenderModal';
 
@@ -52,9 +53,9 @@ export default function ClientsPage({
       if (searchTerm) params.append('search', searchTerm);
       if (dateFilter) params.append('date', dateFilter);
 
-      // Employee data isolation
-      if (user && user.role === 'EMPLOYEE') {
-        params.append('assigned_to', user.name);
+      // Employee data isolation / Manager filter
+      if (user && (user.role === 'EMPLOYEE' || user.isFiltered)) {
+        params.append('assigned_to', user.filterName || user.name);
       }
 
       const token = localStorage.getItem('crm_token');
@@ -558,7 +559,7 @@ export default function ClientsPage({
                     {c.assigned_advocate || 'Adv Kalia Sudharani'}
                   </td>
 
-                  {/* Action Buttons: 3 Icons */}
+                  {/* Action Buttons: 3 Icons (View, Edit, Add Lender) */}
                   <td style={{ padding: '4px 2px', textAlign: 'center' }}>
                     <div style={{ display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
                       <button
