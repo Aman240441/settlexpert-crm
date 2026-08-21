@@ -2,7 +2,15 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Menu, Maximize2, Minimize2, LogOut, User, ChevronDown, IdCard, ShieldCheck } from 'lucide-react';
 import EmployeeProfileModal from './EmployeeProfileModal';
 
-export default function Header({ user, onLogout, toggleSidebar }) {
+export default function Header({
+  user,
+  onLogout,
+  toggleSidebar,
+  employees = [],
+  selectedEmployee = null,
+  onSelectEmployee,
+  onToggleViewMode
+}) {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showDropdown, setShowDropdown] = useState(false);
   const [profileModalOpen, setProfileModalOpen] = useState(false);
@@ -62,14 +70,15 @@ export default function Header({ user, onLogout, toggleSidebar }) {
   };
 
   const activeUser = selfProfile || user || {};
-  const displayName = activeUser.name || 'Employee';
+  const isManagerOrAdmin = activeUser.role === 'MANAGER' || activeUser.role === 'ADMIN' || activeUser.originalRole === 'MANAGER' || activeUser.originalRole === 'ADMIN';
+  const displayName = activeUser.name || (isManagerOrAdmin ? 'Manager' : 'Employee');
   const initialLetter = displayName.charAt(0).toUpperCase();
   const profilePhoto = activeUser.profile_photo || '';
 
   return (
     <header className="top-header">
-      {/* Left side: Toggle button + Welcome Text */}
-      <div className="header-left">
+      {/* Left side: Toggle button + Welcome Text + Manager Workspace Selector */}
+      <div className="header-left" style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
         <button 
           className="toggle-btn" 
           onClick={toggleSidebar}
@@ -77,7 +86,88 @@ export default function Header({ user, onLogout, toggleSidebar }) {
         >
           <Menu size={16} />
         </button>
-        <span className="header-title">Welcome Back to SettleXpert!</span>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <span className="header-title" style={{ whiteSpace: 'nowrap' }}>
+            Welcome Back!
+          </span>
+
+          {/* Manager / Admin Role Badge */}
+          {activeUser.role === 'MANAGER' && (
+            <span style={{
+              fontSize: '11px',
+              fontWeight: 700,
+              background: '#ede9fe',
+              color: '#6d28d9',
+              padding: '2px 8px',
+              borderRadius: '4px',
+              border: '1px solid #ddd6fe'
+            }}>
+              👔 Manager CRM
+            </span>
+          )}
+        </div>
+
+        {/* Team / Employee Selector Dropdown for Manager & Admin */}
+        {isManagerOrAdmin && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginLeft: '6px' }}>
+            <select
+              value={selectedEmployee ? String(selectedEmployee.id) : 'all'}
+              onChange={(e) => {
+                const val = e.target.value;
+                if (val === 'all') {
+                  onSelectEmployee && onSelectEmployee(null);
+                } else {
+                  const emp = employees.find(x => String(x.id) === String(val));
+                  onSelectEmployee && onSelectEmployee(emp || null);
+                }
+              }}
+              style={{
+                padding: '4px 10px',
+                fontSize: '12px',
+                fontWeight: 600,
+                borderRadius: '6px',
+                border: '1.5px solid #818cf8',
+                background: '#f8fafc',
+                color: '#1e293b',
+                cursor: 'pointer',
+                outline: 'none',
+                maxWidth: '240px'
+              }}
+              title="Filter CRM records by employee or view entire team"
+            >
+              <option value="all">👥 All Team Members (Full CRM)</option>
+              {employees.map(emp => (
+                <option key={emp.id} value={emp.id}>
+                  👤 {emp.name} ({emp.designation || 'Consultant'})
+                </option>
+              ))}
+            </select>
+
+            {onToggleViewMode && (
+              <button
+                type="button"
+                onClick={onToggleViewMode}
+                style={{
+                  padding: '4px 9px',
+                  fontSize: '11.5px',
+                  fontWeight: 600,
+                  background: '#0f172a',
+                  color: '#e2e8f0',
+                  borderRadius: '6px',
+                  border: '1px solid #334155',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px'
+                }}
+                title="Open Team Management Portal (Staff, Targets & Logs)"
+              >
+                <span>⚙️ Portal</span>
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Right side: Fullscreen + Avatar */}
