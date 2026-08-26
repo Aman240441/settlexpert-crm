@@ -1,0 +1,147 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-slate-950 text-slate-100 font-sans min-h-screen antialiased;
+  }
+
+  /* Custom Clean Scrollbar */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: #090e17;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: #1e293b;
+    border-radius: 4px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: #334155;
+  }
+}
+
+.glass-panel {
+  background: rgba(15, 23, 42, 0.75);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.glass-card {
+  background: rgba(30, 41, 59, 0.5);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.glow-blue {
+  box-shadow: 0 0 25px -5px rgba(14, 140, 233, 0.25);
+}
+
+/* Custom animation utils */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.15s ease-out forwards;
+}
+
+/* ========================================================= */
+/* STRICT GLOBAL Z-INDEX LAYERING SYSTEM                     */
+/* Base: 0 | Sticky: 10 | Dropdowns: 100 | Popover: 200      */
+/* Sidebar: 500 | Backdrop: 900 | Modal: 1000                */
+/* Modal Dropdown: 1100 | Toast: 2000 | Tooltip: 3000        */
+/* ========================================================= */
+.z-layer-base { z-index: 0; }
+.z-layer-sticky { z-index: 10; }
+.z-layer-dropdown { z-index: 100; }
+.z-layer-popover { z-index: 200; }
+.z-layer-sidebar { z-index: 500; }
+.z-layer-backdrop { z-index: 900; }
+.z-layer-modal { z-index: 1000; }
+.z-layer-modal-dropdown { z-index: 1100; }
+.z-layer-toast { z-index: 2000; }
+.z-layer-tooltip { z-index: 3000; }
+
+/* Pointer events & focus utilities */
+.clickable-target {
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+/* ========================================================= */
+/* STRICT PRINT ISOLATION - FLAWLESS 11-PAGE A4 AGREEMENT     */
+/* ========================================================= */
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 0mm;
+  }
+
+  html, body {
+    margin: 0 !important;
+    padding: 0 !important;
+    background: #ffffff !important;
+    color: #0f172a !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    width: 210mm !important;
+    height: auto !important;
+  }
+
+  /* Hide everything on the page except the agreement printable doc */
+  body * {
+    visibility: hidden;
+  }
+
+  #agreement-printable-doc,
+  #agreement-printable-doc * {
+    visibility: visible !important;
+  }
+
+  #agreement-printable-doc {
+    position: absolute !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 210mm !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: #ffffff !important;
+    display: block !important;
+    z-index: 999999 !important;
+  }
+
+  /* Individual A4 Page Card strictly bounded to exact A4 size */
+  .a4-page-card {
+    width: 210mm !important;
+    min-height: 297mm !important;
+    padding: 8mm 15mm 8mm 15mm !important;
+    margin: 0 !important;
+    border: none !important;
+    box-shadow: none !important;
+    border-radius: 0 !important;
+    page-break-after: always !important;
+    break-after: page !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+    display: flex !important;
+    flex-direction: column !important;
+    justify-content: space-between !important;
+    box-sizing: border-box !important;
+    background: #ffffff !important;
+  }
+
+  .a4-page-card:last-child {
+    page-break-after: auto !important;
+    break-after: auto !important;
+  }
+
+  /* Completely remove non-printable elements */
+  header, nav, aside, footer, [role="navigation"], .print-hidden, .print\:hidden {
+    display: none !important;
+  }
+}
