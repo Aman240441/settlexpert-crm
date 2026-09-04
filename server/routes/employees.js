@@ -4,11 +4,16 @@ const bcrypt = require('bcryptjs');
 const { v4: uuidv4 } = require('uuid');
 const db = require('../db/database');
 const { authenticateToken, requireAdmin, logAudit } = require('../middleware/auth');
+const { syncRecord } = require('../db/supabaseClient');
 
 // GET /api/employees
 router.get('/', authenticateToken, requireAdmin, (req, res) => {
   try {
-    const { search, department, manager, status, team } = req.query;
+    const search = req.query.search && req.query.search !== 'undefined' && req.query.search !== 'null' ? req.query.search.trim() : null;
+    const department = req.query.department && req.query.department !== 'undefined' && req.query.department !== 'null' ? req.query.department.trim() : null;
+    const manager = req.query.manager && req.query.manager !== 'undefined' && req.query.manager !== 'null' ? req.query.manager.trim() : null;
+    const status = req.query.status && req.query.status !== 'undefined' && req.query.status !== 'null' ? req.query.status.trim() : null;
+    const team = req.query.team && req.query.team !== 'undefined' && req.query.team !== 'null' ? req.query.team.trim() : null;
     let sql = `
       SELECT 
         u.id, u.name, u.email, u.phone, u.emp_or_mgr_id, u.role,

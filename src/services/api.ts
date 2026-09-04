@@ -77,8 +77,7 @@ export const api = {
 
   // Managers
   getManagers: (params?: { search?: string; department?: string; type?: string; status?: string }) => {
-    const query = new URLSearchParams(params as any).toString();
-    return request<{ managers: User[] }>(`/managers${query ? `?${query}` : ''}`);
+    return request<{ managers: User[] }>(`/managers${toQueryString(params)}`);
   },
   getManager: (id: string) =>
     request<{ manager: User; permissions: any[]; assignedEmployees: User[] }>(`/managers/${id}`),
@@ -104,8 +103,7 @@ export const api = {
 
   // Employees
   getEmployees: (params?: { search?: string; department?: string; manager?: string; status?: string; team?: string }) => {
-    const query = new URLSearchParams(params as any).toString();
-    return request<{ employees: User[] }>(`/employees${query ? `?${query}` : ''}`);
+    return request<{ employees: User[] }>(`/employees${toQueryString(params)}`);
   },
   getEmployee: (id: string) => request<{ employee: User }>(`/employees/${id}`),
   createEmployee: (data: any) =>
@@ -140,8 +138,7 @@ export const api = {
 
   // Advocates
   getAdvocates: (params?: { search?: string; status?: string }) => {
-    const query = new URLSearchParams(params as any).toString();
-    return request<{ advocates: Advocate[] }>(`/advocates${query ? `?${query}` : ''}`);
+    return request<{ advocates: Advocate[] }>(`/advocates${toQueryString(params)}`);
   },
   getAdvocate: (id: string) =>
     request<{ advocate: Advocate; assignedClients: Client[] }>(`/advocates/${id}`),

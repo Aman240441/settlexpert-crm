@@ -325,6 +325,18 @@ router.post('/', authenticateToken, requireAdmin, (req, res) => {
 
     createStaff();
 
+    // Live Sync to Supabase in background
+    try {
+      const newUser = db.prepare(`SELECT * FROM users WHERE id = ?`).get(userId);
+      const newExt = db.prepare(`SELECT * FROM staff_extended_profiles WHERE user_id = ?`).get(userId);
+      const newKyc = db.prepare(`SELECT * FROM staff_kyc WHERE user_id = ?`).get(userId);
+      if (newUser) syncRecord('users', newUser).catch(e => console.warn('[Supabase users sync]', e.message));
+      if (newExt) syncRecord('staff_extended_profiles', newExt, 'user_id').catch(e => console.warn('[Supabase ext sync]', e.message));
+      if (newKyc) syncRecord('staff_kyc', newKyc).catch(e => console.warn('[Supabase kyc sync]', e.message));
+    } catch (syncErr) {
+      console.warn('[Supabase staff sync error]', syncErr.message);
+    }
+
     logAudit(req, 'Staff Created', 'Staff', userId, {
       name, email, role, staff_type, designation,
       department_id, emp_or_mgr_id: staffId,

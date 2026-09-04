@@ -4,11 +4,15 @@ const bcrypt = require('bcryptjs');
 const { v4: uuidv4 } = require('uuid');
 const db = require('../db/database');
 const { authenticateToken, requireAdmin, logAudit } = require('../middleware/auth');
+const { syncRecord } = require('../db/supabaseClient');
 
 // GET /api/managers
 router.get('/', authenticateToken, requireAdmin, (req, res) => {
   try {
-    const { search, department, type, status } = req.query;
+    const search = req.query.search && req.query.search !== 'undefined' && req.query.search !== 'null' ? req.query.search.trim() : null;
+    const department = req.query.department && req.query.department !== 'undefined' && req.query.department !== 'null' ? req.query.department.trim() : null;
+    const type = req.query.type && req.query.type !== 'undefined' && req.query.type !== 'null' ? req.query.type.trim() : null;
+    const status = req.query.status && req.query.status !== 'undefined' && req.query.status !== 'null' ? req.query.status.trim() : null;
     let sql = `
       SELECT 
         u.id, u.name, u.email, u.phone, u.emp_or_mgr_id, u.role,
@@ -176,6 +180,13 @@ router.post('/', authenticateToken, requireAdmin, (req, res) => {
       manager_type_id
     });
 
+    try {
+      const createdMgr = db.prepare(`SELECT * FROM users WHERE id = ?`).get(id);
+      if (createdMgr) syncRecord('users', createdMgr).catch(e => console.warn('[Supabase mgr sync]', e.message));
+    } catch (syncErr) {
+      console.warn('[Supabase mgr sync error]', syncErr.message);
+    }
+
     res.status(201).json({ message: 'Manager created successfully', id });
   } catch (err) {
     console.error('Create manager error:', err);
@@ -277,6 +288,13 @@ router.put('/:id', authenticateToken, requireAdmin, (req, res) => {
 
     logAudit(req, 'Manager Updated', 'Managers', req.params.id, { name, email, department_id, manager_type_id });
 
+    try {
+      const updatedMgr = db.prepare(`SELECT * FROM users WHERE id = ?`).get(req.params.id);
+      if (updatedMgr) syncRecord('users', updatedMgr).catch(e => console.warn('[Supabase mgr sync]', e.message));
+    } catch (syncErr) {
+      console.warn('[Supabase mgr sync error]', syncErr.message);
+    }
+
     res.json({ message: 'Manager updated successfully' });
   } catch (err) {
     console.error('Update manager error:', err);
@@ -294,6 +312,13 @@ router.patch('/:id/toggle-status', authenticateToken, requireAdmin, (req, res) =
 
     const newStatus = user.status === 'active' ? 'inactive' : 'active';
     db.prepare(`UPDATE users SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`).run(newStatus, req.params.id);
+
+    try {
+      const updatedMgr = db.prepare(`SELECT * FROM users WHERE id = ?`).get(req.params.id);
+      if (updatedMgr) syncRecord('users', updatedMgr).catch(e => console.warn('[Supabase mgr sync]', e.message));
+    } catch (syncErr) {
+      console.warn('[Supabase mgr sync error]', syncErr.message);
+    }
 
     const action = newStatus === 'active' ? 'User Activated' : 'User Deactivated';
     logAudit(req, action, 'Managers', req.params.id, `Manager ${user.name} status changed to ${newStatus}`);
@@ -319,6 +344,13 @@ router.post('/:id/reset-password', authenticateToken, requireAdmin, (req, res) =
 
     const hash = bcrypt.hashSync(new_password, 10);
     db.prepare(`UPDATE users SET password_hash = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`).run(hash, req.params.id);
+
+    try {
+      const updatedMgr = db.prepare(`SELECT * FROM users WHERE id = ?`).get(req.params.id);
+      if (updatedMgr) syncRecord('users', updatedMgr).catch(e => console.warn('[Supabase mgr sync]', e.message));
+    } catch (syncErr) {
+      console.warn('[Supabase mgr sync error]', syncErr.message);
+    }
 
     logAudit(req, 'Manager Password Reset', 'Managers', req.params.id, `Password reset performed for ${user.name}`);
 

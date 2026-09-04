@@ -7,7 +7,8 @@ const { authenticateToken, requireAdmin, requireEmployeeOrAdmin, logAudit } = re
 // GET /api/advocates
 router.get('/', authenticateToken, requireEmployeeOrAdmin, (req, res) => {
   try {
-    const { search, status } = req.query;
+    const search = req.query.search && req.query.search !== 'undefined' && req.query.search !== 'null' ? req.query.search.trim() : null;
+    const status = req.query.status && req.query.status !== 'undefined' && req.query.status !== 'null' ? req.query.status.trim() : null;
     let sql = `
       SELECT a.*, 
         (SELECT COUNT(*) FROM clients c WHERE c.advocate_id = a.id) as assigned_clients_count
