@@ -41,9 +41,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const login = async (credentials: { email: string; password: string }) => {
     const res = await api.login(credentials);
-    if (res.user.role !== 'admin') {
-      throw new Error('Access denied. Only Super Administrator can access the Admin Control Center in Step 1.');
-    }
     localStorage.setItem('settl_expert_token', res.token);
     setToken(res.token);
     setUser(res.user);
