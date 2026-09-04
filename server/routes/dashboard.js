@@ -112,7 +112,7 @@ router.get('/stats', authenticateToken, requireAdmin, (req, res) => {
     });
   } catch (err) {
     console.error('Dashboard stats error:', err);
-    res.status(500).json({ error: 'Failed to generate dashboard metrics' });
+    res.status(500).json({ error: 'Failed to generate dashboard metrics', details: err.message });
   }
 });
 
