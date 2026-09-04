@@ -2522,5 +2522,18 @@ const handleReportsSummary = (req, res) => {
 router.get('/reports-summary', authenticateToken, handleReportsSummary);
 router.get('/reports/summary', authenticateToken, handleReportsSummary);
 
+// POST /api/crm/wipe-data - Admin endpoint to wipe all transactional CRM data cleanly from local SQLite & Supabase
+router.post('/wipe-data', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const { wipeAllData } = require('../scripts/wipe_all_data');
+    await wipeAllData();
+    logAudit(req, 'RESET', 'System', 'ALL', 'Wiped all transactional CRM data while preserving user accounts');
+    res.json({ success: true, message: 'All transactional CRM data successfully wiped from SQLite and Supabase.' });
+  } catch (err) {
+    console.error('Wipe data error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 module.exports = router;
 
