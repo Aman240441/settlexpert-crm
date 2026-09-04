@@ -402,7 +402,7 @@ router.get('/leads', authenticateToken, requireEmployeeOrAdmin, (req, res) => {
         params.push(cleanStatus);
       }
     } else {
-      sql += ` AND l.status != 'converted'`;
+      sql += ` AND l.status != 'converted' AND l.status != 'deleted'`;
     }
 
     // Calendar & Range filter strictly filters by permanent created_at date
@@ -876,6 +876,20 @@ router.put('/leads/:id', authenticateToken, requireEmployeeOrAdmin, (req, res) =
   }
 });
 
+// DELETE /api/crm/leads/:id - Hard delete a lead
+router.delete('/leads/:id', authenticateToken, requireEmployeeOrAdmin, (req, res) => {
+  try {
+    const lead = db.prepare(`SELECT * FROM leads WHERE id = ?`).get(req.params.id);
+    if (!lead) return res.status(404).json({ error: 'Lead not found' });
+    db.prepare(`DELETE FROM leads WHERE id = ?`).run(req.params.id);
+    logAudit(req, 'Lead Deleted', 'Leads', req.params.id, { leadNumber: lead.lead_number, name: lead.name });
+    res.json({ message: 'Lead deleted successfully' });
+  } catch (err) {
+    console.error('Delete lead error:', err);
+    res.status(500).json({ error: 'Failed to delete lead' });
+  }
+});
+
 // POST /api/crm/leads/:id/follow-up - Create Follow-up Record in History
 router.post('/leads/:id/follow-up', authenticateToken, requireEmployeeOrAdmin, (req, res) => {
   try {
@@ -1305,8 +1319,26 @@ router.put('/clients/:id', authenticateToken, requireEmployeeOrAdmin, (req, res)
   }
 });
 
+// DELETE /api/crm/clients/:id - Hard delete a client
+router.delete('/clients/:id', authenticateToken, requireEmployeeOrAdmin, (req, res) => {
+  try {
+    const client = db.prepare(`SELECT * FROM clients WHERE id = ?`).get(req.params.id);
+    if (!client) return res.status(404).json({ error: 'Client not found' });
+    db.prepare(`DELETE FROM lenders WHERE client_id = ?`).run(req.params.id);
+    db.prepare(`DELETE FROM agreements WHERE client_id = ?`).run(req.params.id);
+    db.prepare(`DELETE FROM monthly_payment_records WHERE client_id = ?`).run(req.params.id);
+    db.prepare(`DELETE FROM clients WHERE id = ?`).run(req.params.id);
+    logAudit(req, 'Client Deleted', 'Clients', req.params.id, { clientNumber: client.client_number, name: client.name });
+    res.json({ message: 'Client deleted successfully' });
+  } catch (err) {
+    console.error('Delete client error:', err);
+    res.status(500).json({ error: 'Failed to delete client' });
+  }
+});
+
 // POST /api/crm/clients/:id/lenders - Add Lender
 router.post('/clients/:id/lenders', authenticateToken, requireEmployeeOrAdmin, (req, res) => {
+
   try {
     const { bank_name, loan_type, balance = 0, default_date, status = 'Defaulted', lender_email, pdf_url } = req.body;
     if (!bank_name) return res.status(400).json({ error: 'Bank Name is required' });
