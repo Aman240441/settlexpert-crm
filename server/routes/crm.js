@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { v4: uuidv4 } = require('uuid');
 const db = require('../db/database');
-const { authenticateToken, requireEmployeeOrAdmin, requireManagerOrAdmin, logAudit } = require('../middleware/auth');
+const { authenticateToken, requireAdmin, requireEmployeeOrAdmin, requireManagerOrAdmin, logAudit } = require('../middleware/auth');
 
 // Bulletproof helper to generate sequential permanent IDs: LEAD-0001, CL-0001, AGR-0001...
 function generateSequentialId(table, column, prefix) {
