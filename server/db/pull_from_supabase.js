@@ -73,6 +73,7 @@ async function pullFromSupabase() {
 
     // 5. Leads
     const { data: leads } = await supabase.from('leads').select('*');
+    db.prepare('DELETE FROM leads').run();
     if (leads && leads.length > 0) {
       const stmt = db.prepare('INSERT OR REPLACE INTO leads (id, lead_number, name, phone, email, city, total_debt, monthly_income, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
       for (const l of leads) {
@@ -90,16 +91,19 @@ async function pullFromSupabase() {
         );
       }
       console.log(` ✔ [Supabase Pull] Hydrated ${leads.length} records into 'leads'`);
+    } else {
+      console.log(` ✔ [Supabase Pull] 'leads' table is clean (0 records).`);
     }
 
     // 6. Clients
     const { data: clients } = await supabase.from('clients').select('*');
+    db.prepare('DELETE FROM clients').run();
     if (clients && clients.length > 0) {
       const stmt = db.prepare('INSERT OR REPLACE INTO clients (id, client_number, name, phone, email, city, total_debt, sx_fee, pending_amount, status, case_status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
       for (const c of clients) {
         stmt.run(
           c.id,
-          c.client_id || `CL-${c.id}`,
+          c.client_number || `CL-${c.id}`,
           c.name || 'Unnamed',
           c.phone || '',
           c.email || '',
@@ -113,10 +117,13 @@ async function pullFromSupabase() {
         );
       }
       console.log(` ✔ [Supabase Pull] Hydrated ${clients.length} records into 'clients'`);
+    } else {
+      console.log(` ✔ [Supabase Pull] 'clients' table is clean (0 records).`);
     }
 
     // 7. Agreements
     const { data: agreements } = await supabase.from('agreements').select('*');
+    db.prepare('DELETE FROM agreements').run();
     if (agreements && agreements.length > 0) {
       const stmt = db.prepare('INSERT OR REPLACE INTO agreements (id, agreement_number, client_id, name, phone, email, total_fee, monthly_fee, resolution_duration, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
       for (const a of agreements) {
@@ -135,6 +142,8 @@ async function pullFromSupabase() {
         );
       }
       console.log(` ✔ [Supabase Pull] Hydrated ${agreements.length} records into 'agreements'`);
+    } else {
+      console.log(` ✔ [Supabase Pull] 'agreements' table is clean (0 records).`);
     }
 
   } catch (err) {
