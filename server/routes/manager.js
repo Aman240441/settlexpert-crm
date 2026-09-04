@@ -756,11 +756,6 @@ router.get('/clients/:id/monthly-payments', authenticateToken, requireManagerOrA
 // ==========================================
 router.get('/advocates', authenticateToken, requireManagerOrAdmin, (req, res) => {
   try {
-    const scope = getManagerScope(req);
-    if (!scope.isAdmin && scope.managerType !== 'LEGAL') {
-      return res.status(403).json({ error: 'Forbidden: Legal Manager access required for Advocates directory' });
-    }
-
     const advocates = db.prepare(`
       SELECT a.*,
              (SELECT COUNT(*) FROM clients c WHERE c.advocate_id = a.id) as assigned_clients_count

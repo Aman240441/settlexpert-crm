@@ -67,13 +67,17 @@ export const ManagerClientsView: React.FC<ManagerClientsViewProps> = ({ managerT
   const fetchClientsAndAdvocates = async () => {
     try {
       setLoading(true);
-      const [cliRes, advRes] = await Promise.all([
-        api.getManagerClients({ search: search || undefined, case_status: statusFilter || undefined, page, limit }),
-        api.getAdvocates()
-      ]);
-      setClients(cliRes.clients);
-      setTotal(cliRes.pagination.total);
-      setAdvocates(advRes.advocates || []);
+      const cliRes = await api.getManagerClients({ search: search || undefined, case_status: statusFilter || undefined, page, limit });
+      setClients(cliRes?.clients || []);
+      setTotal(cliRes?.pagination?.total || 0);
+
+      // Load advocates safely so any advocate permissions issue doesn't block clients view
+      try {
+        const advRes = await api.getAdvocates();
+        setAdvocates(advRes?.advocates || []);
+      } catch {
+        setAdvocates([]);
+      }
     } catch (err: any) {
       setFeedbackMsg({ type: 'error', text: 'Failed to load clients' });
     } finally {

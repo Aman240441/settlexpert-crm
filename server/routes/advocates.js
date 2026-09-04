@@ -2,10 +2,10 @@ const express = require('express');
 const router = express.Router();
 const { v4: uuidv4 } = require('uuid');
 const db = require('../db/database');
-const { authenticateToken, requireAdmin, logAudit } = require('../middleware/auth');
+const { authenticateToken, requireAdmin, requireEmployeeOrAdmin, logAudit } = require('../middleware/auth');
 
 // GET /api/advocates
-router.get('/', authenticateToken, requireAdmin, (req, res) => {
+router.get('/', authenticateToken, requireEmployeeOrAdmin, (req, res) => {
   try {
     const { search, status } = req.query;
     let sql = `
@@ -37,7 +37,7 @@ router.get('/', authenticateToken, requireAdmin, (req, res) => {
 });
 
 // GET /api/advocates/:id
-router.get('/:id', authenticateToken, requireAdmin, (req, res) => {
+router.get('/:id', authenticateToken, requireEmployeeOrAdmin, (req, res) => {
   try {
     const advocate = db.prepare(`SELECT * FROM advocates WHERE id = ?`).get(req.params.id);
     if (!advocate) {
