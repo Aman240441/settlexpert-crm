@@ -401,6 +401,8 @@ router.get('/leads', authenticateToken, requireEmployeeOrAdmin, (req, res) => {
         sql += ` AND l.status = ?`;
         params.push(cleanStatus);
       }
+    } else {
+      sql += ` AND l.status != 'converted'`;
     }
 
     // Calendar & Range filter strictly filters by permanent created_at date
@@ -426,7 +428,7 @@ router.get('/leads', authenticateToken, requireEmployeeOrAdmin, (req, res) => {
 
     // Calculate dynamic status counts for pill badges
     const scopeFilter = isScoped ? `WHERE (l.employee_id = '${employeeId}' OR l.manager_id = '${employeeId}' OR l.created_by = '${req.user.name}')` : '';
-    const allCount = db.prepare(`SELECT COUNT(*) as c FROM leads l ${scopeFilter}`).get().c;
+    const allCount = db.prepare(`SELECT COUNT(*) as c FROM leads l ${scopeFilter ? scopeFilter + " AND l.status != 'converted'" : "WHERE l.status != 'converted'"} `).get().c;
     const newCount = db.prepare(`SELECT COUNT(*) as c FROM leads l ${scopeFilter ? scopeFilter + " AND l.status = 'new'" : "WHERE l.status = 'new'"} `).get().c;
     const contactedCount = db.prepare(`SELECT COUNT(*) as c FROM leads l ${scopeFilter ? scopeFilter + " AND l.status = 'contacted'" : "WHERE l.status = 'contacted'"} `).get().c;
     const interestedCount = db.prepare(`SELECT COUNT(*) as c FROM leads l ${scopeFilter ? scopeFilter + " AND l.status = 'interested'" : "WHERE l.status = 'interested'"} `).get().c;
@@ -611,6 +613,157 @@ router.post('/leads', authenticateToken, requireEmployeeOrAdmin, (req, res) => {
   }
 });
 
+// Helper to ensure an official Agreement record exists for a Client
+function ensureAgreementForClient(client, requestingUser) {
+  if (!client || !client.id) return null;
+  const existingAgr = db.prepare(`SELECT * FROM agreements WHERE client_id = ?`).get(client.id);
+  if (existingAgr) return existingAgr;
+
+  const agreementId = 'agr-' + uuidv4().slice(0, 8);
+  const agreementNumber = generateAgreementId();
+  const today = new Date().toISOString().split('T')[0];
+  const totalFee = client.sx_fee || (client.service_fee ? parseFloat(client.service_fee) : 25000);
+  const monthlyFee = Math.round(totalFee / 6);
+  const monthlyIncome = parseFloat(client.monthly_income) || 35000;
+  const clientName = client.name || 'Client';
+  const clientAddress = client.city || client.address || 'Delhi NCR, India';
+  const clientPhone = client.phone || '—';
+  const clientEmail = client.email || '—';
+
+  // Get lenders if available
+  const lenders = db.prepare(`SELECT * FROM lenders WHERE client_id = ?`).all(client.id);
+  const lenderText = lenders.length > 0
+    ? lenders.map((l, i) => `   ${i + 1}. ${l.bank_name || 'Bank'} — ${l.loan_type || 'Loan'} — ₹${(parseFloat(l.outstanding_amount || l.balance || 0)).toLocaleString('en-IN')}`).join('\n')
+    : `   1. Designated Banking Accounts & Credit Facilities (Total Debt: ₹${(parseFloat(client.total_debt) || 0).toLocaleString('en-IN')})`;
+
+  const agreementBody = `CONSULTANCY AGREEMENT
+This Consultancy Agreement ("Agreement") is executed on ${today} between:
+M/s. SettleXpert LLP, having its registered/operations office at CB-201, Naraina Vihar, Ring Road, New Delhi, Delhi, India, hereinafter referred to as the "First Party" or the "Company".
+AND
+${clientName}, residing at ${clientAddress}, Mobile No.: ${clientPhone}, Email ID: ${clientEmail}, hereinafter referred to as the "Second Party" or the "Client".
+
+1. PURPOSE OF THE AGREEMENT
+The purpose of this Agreement is to appoint the Company as the Client's financial consultancy partner for debt resolution advisory.
+
+ANNEXURE A: LIST OF ENROLLED DEBT ACCOUNTS / LENDERS
+${lenderText}
+
+ANNEXURE B: CONSULTANCY FEE STRUCTURE
+1. Total Agreed Consultancy Fee: ₹${totalFee.toLocaleString('en-IN')}
+2. Monthly Installment Fee: ₹${monthlyFee.toLocaleString('en-IN')}
+3. Service Tenure: 6 Months`;
+
+  db.prepare(`
+    INSERT INTO agreements (
+      id, agreement_number, client_id, fee_plan_id,
+      name, phone, email, address, pin_number, dob,
+      start_date, end_date, total_fee, monthly_fee, resolution_duration,
+      prepared_by, executed_date, monthly_income, status, agreement_body, created_by, created_at, updated_at
+    ) VALUES (?, ?, ?, NULL, ?, ?, ?, ?, NULL, NULL, ?, NULL, ?, ?, '6 Months', ?, ?, ?, 'active', ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+  `).run(
+    agreementId,
+    agreementNumber,
+    client.id,
+    clientName,
+    clientPhone,
+    clientEmail,
+    clientAddress,
+    today,
+    totalFee,
+    monthlyFee,
+    requestingUser?.name || 'SettleXpert Legal Desk',
+    today,
+    monthlyIncome,
+    agreementBody,
+    requestingUser?.name || 'System'
+  );
+
+  const createdAgr = db.prepare(`SELECT * FROM agreements WHERE id = ?`).get(agreementId);
+  syncRecord('agreements', createdAgr).catch(err => console.error('[Supabase Sync Error] Agreement:', err));
+
+  return createdAgr;
+}
+
+// Helper to convert lead to client
+function convertLeadToClient(leadId, requestingUser) {
+  const lead = db.prepare(`SELECT * FROM leads WHERE id = ?`).get(leadId);
+  if (!lead) throw new Error('Lead not found');
+
+  // Check if client already exists for this lead
+  let client = db.prepare(`SELECT * FROM clients WHERE lead_id = ? OR phone = ?`).get(lead.id, lead.phone);
+
+  if (client) {
+    db.prepare(`UPDATE leads SET status = 'converted', updated_at = CURRENT_TIMESTAMP WHERE id = ?`).run(lead.id);
+    ensureAgreementForClient(client, requestingUser);
+    return {
+      message: 'Client record already linked for this lead',
+      client_id: client.id,
+      client_number: client.client_number,
+      already_existed: true
+    };
+  }
+
+  const clientId = 'cli-' + uuidv4().slice(0, 8);
+  const clientNumber = generateClientId();
+
+  db.prepare(`
+    INSERT INTO clients (
+      id, client_number, lead_id, name, email, phone, city,
+      employment_status, employment_type, total_debt, monthly_income,
+      credit_card_dues, personal_loan_dues, loan_type,
+      paying_emis, harassment_calls, settlement_needed, consultation_timing,
+      settlement_target, sx_fee, fees_date, fees_status, status, case_status,
+      employee_id, manager_id, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Pending', 'active', 'active', ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+  `).run(
+    clientId,
+    clientNumber,
+    lead.id,
+    lead.name,
+    lead.email,
+    lead.phone,
+    lead.city,
+    lead.employment_status,
+    lead.employment_type,
+    lead.total_debt,
+    lead.monthly_income,
+    lead.credit_card_dues,
+    lead.personal_loan_dues,
+    lead.bank_name ? `Credit Card & Loans (${lead.bank_name})` : (lead.service_needed || 'Credit Card & Loans'),
+    lead.paying_emis,
+    lead.harassment_calls,
+    lead.settlement_needed,
+    lead.consultation_timing,
+    Math.round((lead.total_debt || 0) * 0.45), // 45% standard target
+    lead.service_fee || 25000,
+    new Date().toISOString().split('T')[0],
+    lead.employee_id || (requestingUser?.id || null),
+    lead.manager_id || null
+  );
+
+  // If bank name exists on lead, add as initial lender
+  if (lead.bank_name) {
+    db.prepare(`
+      INSERT INTO lenders (id, client_id, bank_name, loan_type, balance, status, created_at)
+      VALUES (?, ?, ?, 'Credit Card / Personal Loan', ?, 'Defaulted', CURRENT_TIMESTAMP)
+    `).run('len-' + uuidv4().slice(0, 8), clientId, lead.bank_name, lead.total_debt || 0);
+  }
+
+  // Update lead status to converted
+  db.prepare(`UPDATE leads SET status = 'converted', updated_at = CURRENT_TIMESTAMP WHERE id = ?`).run(lead.id);
+
+  // Automatically create the Agreement for this client
+  const createdClient = db.prepare(`SELECT * FROM clients WHERE id = ?`).get(clientId);
+  ensureAgreementForClient(createdClient, requestingUser);
+
+  return {
+    message: `Lead converted successfully into Client ${clientNumber}`,
+    client_id: clientId,
+    client_number: clientNumber,
+    already_existed: false
+  };
+}
+
 // PUT /api/crm/leads/:id - Edit Lead without changing created_at or duplicating
 router.put('/leads/:id', authenticateToken, requireEmployeeOrAdmin, (req, res) => {
   try {
@@ -700,7 +853,23 @@ router.put('/leads/:id', authenticateToken, requireEmployeeOrAdmin, (req, res) =
 
     logAudit(req, 'Lead Updated', 'Leads', req.params.id, { name: name || existing.name, status });
 
-    res.json({ message: 'Lead updated successfully' });
+    // If status is changed to converted, automatically convert to Client record
+    let conversionResult = null;
+    if (status === 'converted') {
+      try {
+        conversionResult = convertLeadToClient(req.params.id, req.user);
+        logAudit(req, 'Lead Converted', 'Leads', req.params.id, { leadNumber: existing.lead_number, clientNumber: conversionResult.client_number });
+      } catch (convErr) {
+        console.error('Auto client conversion on lead update failed:', convErr);
+      }
+    }
+
+    res.json({
+      message: 'Lead updated successfully',
+      converted: !!conversionResult,
+      client_id: conversionResult?.client_id,
+      client_number: conversionResult?.client_number
+    });
   } catch (err) {
     console.error('Update lead error:', err);
     res.status(500).json({ error: 'Failed to update lead' });
@@ -746,7 +915,24 @@ router.post('/leads/:id/follow-up', authenticateToken, requireEmployeeOrAdmin, (
       remark
     });
 
-    res.status(201).json({ message: 'Follow-up logged successfully', id: followUpId });
+    // If follow-up final status is converted, auto-convert to Client
+    let conversionResult = null;
+    if (final_status === 'converted') {
+      try {
+        conversionResult = convertLeadToClient(req.params.id, req.user);
+        logAudit(req, 'Lead Converted', 'Leads', req.params.id, { leadNumber: lead.lead_number, clientNumber: conversionResult.client_number });
+      } catch (convErr) {
+        console.error('Auto client conversion on follow-up failed:', convErr);
+      }
+    }
+
+    res.status(201).json({
+      message: 'Follow-up logged successfully',
+      id: followUpId,
+      converted: !!conversionResult,
+      client_id: conversionResult?.client_id,
+      client_number: conversionResult?.client_number
+    });
   } catch (err) {
     console.error('Follow-up error:', err);
     res.status(500).json({ error: 'Failed to record follow-up' });
@@ -759,75 +945,15 @@ router.post('/leads/:id/convert', authenticateToken, requireEmployeeOrAdmin, (re
     const lead = db.prepare(`SELECT * FROM leads WHERE id = ?`).get(req.params.id);
     if (!lead) return res.status(404).json({ error: 'Lead not found' });
 
-    // Check if client already exists for this lead
-    let client = db.prepare(`SELECT * FROM clients WHERE lead_id = ? OR phone = ?`).get(lead.id, lead.phone);
+    const result = convertLeadToClient(req.params.id, req.user);
 
-    if (client) {
-      // Mark lead as converted if not already
-      db.prepare(`UPDATE leads SET status = 'converted', updated_at = CURRENT_TIMESTAMP WHERE id = ?`).run(lead.id);
-      return res.json({
-        message: 'Client record already linked for this lead',
-        client_id: client.id,
-        client_number: client.client_number
-      });
-    }
-
-    const clientId = 'cli-' + uuidv4().slice(0, 8);
-    const clientNumber = generateClientId();
-
-    db.prepare(`
-      INSERT INTO clients (
-        id, client_number, lead_id, name, email, phone, city,
-        employment_status, employment_type, total_debt, monthly_income,
-        credit_card_dues, personal_loan_dues, loan_type,
-        paying_emis, harassment_calls, settlement_needed, consultation_timing,
-        settlement_target, sx_fee, fees_date, fees_status, status, case_status,
-        employee_id, manager_id, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Pending', 'active', 'active', ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-    `).run(
-      clientId,
-      clientNumber,
-      lead.id,
-      lead.name,
-      lead.email,
-      lead.phone,
-      lead.city,
-      lead.employment_status,
-      lead.employment_type,
-      lead.total_debt,
-      lead.monthly_income,
-      lead.credit_card_dues,
-      lead.personal_loan_dues,
-      lead.bank_name ? `Credit Card & Loans (${lead.bank_name})` : 'Credit Card & Loans',
-      lead.paying_emis,
-      lead.harassment_calls,
-      lead.settlement_needed,
-      lead.consultation_timing,
-      Math.round(lead.total_debt * 0.45), // 45% standard target
-      lead.service_fee || 25000,
-      new Date().toISOString().split('T')[0],
-      lead.employee_id || req.user.id,
-      lead.manager_id
-    );
-
-    // If bank name exists on lead, add as initial lender
-    if (lead.bank_name) {
-      db.prepare(`
-        INSERT INTO lenders (id, client_id, bank_name, loan_type, balance, status, created_at)
-        VALUES (?, ?, ?, 'Credit Card / Personal Loan', ?, 'Defaulted', CURRENT_TIMESTAMP)
-      `).run('len-' + uuidv4().slice(0, 8), clientId, lead.bank_name, lead.total_debt);
-    }
-
-    // Update lead status to converted
-    db.prepare(`UPDATE leads SET status = 'converted', updated_at = CURRENT_TIMESTAMP WHERE id = ?`).run(lead.id);
-
-    logAudit(req, 'Lead Converted', 'Leads', lead.id, { leadNumber: lead.lead_number, clientNumber });
-    logAudit(req, 'Client Created', 'Clients', clientId, { clientNumber, fromLead: lead.lead_number });
+    logAudit(req, 'Lead Converted', 'Leads', lead.id, { leadNumber: lead.lead_number, clientNumber: result.client_number });
+    logAudit(req, 'Client Created', 'Clients', result.client_id, { clientNumber: result.client_number, fromLead: lead.lead_number });
 
     res.status(201).json({
-      message: `Lead converted successfully into Client ${clientNumber}`,
-      client_id: clientId,
-      client_number: clientNumber
+      message: result.message,
+      client_id: result.client_id,
+      client_number: result.client_number
     });
   } catch (err) {
     console.error('Lead conversion error:', err);
@@ -1078,6 +1204,9 @@ router.post('/clients', authenticateToken, requireEmployeeOrAdmin, (req, res) =>
       // advocate_id = NULL always — must be assigned via Manager PATCH endpoint
     );
 
+    const createdClient = db.prepare(`SELECT * FROM clients WHERE id = ?`).get(id);
+    ensureAgreementForClient(createdClient, req.user);
+
     logAudit(req, 'Client Created', 'Clients', id, { clientNumber, name });
     res.status(201).json({ message: 'Client onboarded successfully', id, client_number: clientNumber });
   } catch (err) {
@@ -1224,6 +1353,21 @@ router.delete('/clients/:id/lenders/:lenderId', authenticateToken, requireEmploy
 // GET /api/crm/agreements
 router.get('/agreements', authenticateToken, requireEmployeeOrAdmin, (req, res) => {
   try {
+    // Auto-ensure agreements for all existing clients so every client appears in Agreements
+    try {
+      const clientsWithoutAgr = db.prepare(`
+        SELECT c.* FROM clients c
+        LEFT JOIN agreements a ON c.id = a.client_id
+        WHERE a.id IS NULL
+      `).all();
+
+      for (const c of clientsWithoutAgr) {
+        ensureAgreementForClient(c, req.user);
+      }
+    } catch (autoErr) {
+      console.error('[Auto-Agreement Error]:', autoErr);
+    }
+
     const { isScoped, employeeId } = getEmployeeScope(req);
     const { search, status, date, calendar_date, from_date, to_date, page = 1, limit = 25 } = req.query;
 
@@ -2090,7 +2234,7 @@ router.get('/notifications', authenticateToken, (req, res) => {
     if (req.user.role === 'employee') {
       sql += ` AND (n.employee_id = ? OR c.employee_id = ?)`;
       params.push(req.user.id, req.user.id);
-    } 
+    }
     // Manager: Notifications for clients within team/department scope
     else if (req.user.role === 'manager') {
       sql += ` AND (
@@ -2212,6 +2356,171 @@ router.post('/notifications/mark-all-read', authenticateToken, (req, res) => {
     res.status(500).json({ error: 'Failed to mark all notifications as read' });
   }
 });
+// ==========================================
+// 8. PAYMENTS MANAGEMENT & VERIFICATION (ADMIN & MANAGER)
+// ==========================================
+router.get('/payments', authenticateToken, (req, res) => {
+  try {
+    const { search, status, date } = req.query;
+    let sql = `
+      SELECT p.*, 
+             c.name as client_name, c.client_number, c.phone as client_phone,
+             a.agreement_number,
+             u.name as employee_name
+      FROM payments p
+      LEFT JOIN clients c ON p.client_id = c.id
+      LEFT JOIN agreements a ON p.agreement_id = a.id
+      LEFT JOIN users u ON c.employee_id = u.id
+      WHERE 1=1
+    `;
+    const params = [];
+    if (status && status !== 'all') {
+      sql += ` AND p.status = ?`;
+      params.push(status);
+    }
+    if (date) {
+      sql += ` AND date(p.payment_date) = date(?)`;
+      params.push(date);
+    }
+    if (search) {
+      sql += ` AND (p.receipt_number LIKE ? OR c.name LIKE ? OR c.client_number LIKE ? OR p.transaction_id LIKE ?)`;
+      params.push(`%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`);
+    }
+    sql += ` ORDER BY p.created_at DESC`;
+    const payments = db.prepare(sql).all(...params);
+    res.json({ payments });
+  } catch (err) {
+    console.error('Failed to fetch payments', err);
+    res.status(500).json({ error: 'Failed to fetch payments' });
+  }
+});
+
+router.patch('/payments/:id/verify', authenticateToken, (req, res) => {
+  try {
+    const { status = 'verified', notes } = req.body;
+    const payment = db.prepare(`SELECT * FROM payments WHERE id = ?`).get(req.params.id);
+    if (!payment) return res.status(404).json({ error: 'Payment not found' });
+
+    db.prepare(`
+      UPDATE payments 
+      SET status = ?, verified_by = ?, verified_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `).run(status, req.user.name, req.params.id);
+
+    if (payment.client_id && status === 'verified') {
+      const sumRow = db.prepare(`SELECT COALESCE(SUM(amount), 0) as total FROM payments WHERE client_id = ? AND status = 'verified'`).get(payment.client_id);
+      const totalRec = sumRow ? sumRow.total : payment.amount;
+      const client = db.prepare(`SELECT * FROM clients WHERE id = ?`).get(payment.client_id);
+      if (client) {
+        const sxFee = client.sx_fee || (client.total_debt * 0.1) || 0;
+        const feeStatus = totalRec >= sxFee && sxFee > 0 ? 'Paid' : totalRec > 0 ? 'Partial' : 'Pending';
+        db.prepare(`UPDATE clients SET total_received = ?, fees_status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`).run(totalRec, feeStatus, payment.client_id);
+      }
+    }
+
+    logAudit(req, 'Payment Verified', 'Payments', req.params.id, { receipt: payment.receipt_number, amount: payment.amount, status, notes });
+    res.json({ message: `Payment marked as ${status}` });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to verify payment' });
+  }
+});
+
+// ==========================================
+// 9. OPERATIONS TASKS QUEUE
+// ==========================================
+router.get('/tasks', authenticateToken, (req, res) => {
+  try {
+    const { status, module: mod } = req.query;
+    let sql = `
+      SELECT t.*, 
+             u.name as assigned_to_name, u.emp_or_mgr_id as assigned_to_code
+      FROM tasks t
+      LEFT JOIN users u ON t.assigned_to = u.id
+      WHERE 1=1
+    `;
+    const params = [];
+    if (status && status !== 'all') {
+      sql += ` AND t.status = ?`;
+      params.push(status);
+    }
+    if (mod && mod !== 'all') {
+      sql += ` AND t.module = ?`;
+      params.push(mod);
+    }
+    sql += ` ORDER BY t.created_at DESC`;
+    const tasks = db.prepare(sql).all(...params);
+    res.json({ tasks });
+  } catch (err) {
+    console.error('Failed to fetch tasks', err);
+    res.status(500).json({ error: 'Failed to fetch tasks' });
+  }
+});
+
+router.post('/tasks', authenticateToken, (req, res) => {
+  try {
+    const { title, description, module: mod, priority = 'medium', due_date, assigned_to } = req.body;
+    if (!title) return res.status(400).json({ error: 'Task title is required' });
+
+    const id = 'task-' + uuidv4().slice(0, 8);
+    db.prepare(`
+      INSERT INTO tasks (id, title, description, module, priority, due_date, status, assigned_to, created_by)
+      VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?)
+    `).run(id, title.trim(), description || null, mod || 'General', priority, due_date || null, assigned_to || null, req.user.name);
+
+    logAudit(req, 'Task Created', 'Tasks', id, { title, priority, due_date });
+    res.status(201).json({ message: 'Task created successfully', id });
+  } catch (err) {
+    console.error('Failed to create task', err);
+    res.status(500).json({ error: 'Failed to create task' });
+  }
+});
+
+router.patch('/tasks/:id/status', authenticateToken, (req, res) => {
+  try {
+    const { status } = req.body;
+    db.prepare(`UPDATE tasks SET status = ? WHERE id = ?`).run(status, req.params.id);
+    res.json({ message: 'Task status updated' });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to update task status' });
+  }
+});
+
+// ==========================================
+// 10. REPORTS SUMMARY
+// ==========================================
+const handleReportsSummary = (req, res) => {
+  try {
+    const deptStats = db.prepare(`
+      SELECT d.name as department, 
+             COUNT(DISTINCT u.id) as total_staff,
+             COUNT(DISTINCT l.id) as total_leads,
+             COUNT(DISTINCT c.id) as total_clients
+      FROM departments d
+      LEFT JOIN users u ON u.department_id = d.id
+      LEFT JOIN leads l ON l.department_id = d.id
+      LEFT JOIN clients c ON c.manager_id = u.id
+      GROUP BY d.id, d.name
+    `).all();
+
+    const planStats = db.prepare(`
+      SELECT fp.name as plan_name, fp.duration, fp.default_fee,
+             COUNT(c.id) as client_count,
+             COALESCE(SUM(a.total_fee), 0) as total_revenue
+      FROM fee_plans fp
+      LEFT JOIN clients c ON c.fee_plan_id = fp.id
+      LEFT JOIN agreements a ON a.fee_plan_id = fp.id
+      GROUP BY fp.id, fp.name
+    `).all();
+
+    res.json({ deptStats, planStats });
+  } catch (err) {
+    console.error('Failed to generate reports', err);
+    res.status(500).json({ error: 'Failed to generate reports' });
+  }
+};
+
+router.get('/reports-summary', authenticateToken, handleReportsSummary);
+router.get('/reports/summary', authenticateToken, handleReportsSummary);
 
 module.exports = router;
 

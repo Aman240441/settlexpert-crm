@@ -33,6 +33,7 @@ import { api } from '../../services/api';
 import { Modal } from '../common/Modal';
 import { CalendarDateFilter, getTodayStr } from '../common/CalendarDateFilter';
 import { AgreementDocumentView } from './AgreementDocumentView';
+import { ClientDetailsUnifiedView } from '../crm/ClientDetailsUnifiedView';
 
 interface EmployeeClientsViewProps {
   initialCaseStatusFilter?: string;
@@ -469,537 +470,23 @@ export const EmployeeClientsView: React.FC<EmployeeClientsViewProps> = ({
   }
 
   // ==========================================
-  // RENDER SCREEN: VIEW CLIENT DETAILS (Exact Reference Screenshot)
+  // RENDER SCREEN: VIEW CLIENT DETAILS (With Onboarding Form Tab)
   // ==========================================
   if (viewMode === 'view_details' && currentClient) {
     return (
-      <div className="space-y-4 font-sans text-slate-800 pb-16 ">
-        {/* Top Header Card */}
-        <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-xs flex items-center justify-between">
-          <div className="flex items-center space-x-3">
-            <div className="h-10 w-10 rounded-lg border border-emerald-300 bg-emerald-50 flex items-center justify-center text-emerald-600 shrink-0">
-              <User className="h-5 w-5" />
-            </div>
-            <div>
-              <h1 className="text-base font-bold text-slate-900 leading-tight">
-                {currentClient.name}
-              </h1>
-              <div className="flex items-center space-x-1.5 text-xs text-blue-600 font-semibold mt-0.5">
-                <span className="h-1.5 w-1.5 rounded-full bg-blue-600"></span>
-                <span>Case Status: {currentClient.case_status ? (currentClient.case_status.charAt(0).toUpperCase() + currentClient.case_status.slice(1)) : 'Active'}</span>
-              </div>
-            </div>
-          </div>
-
-          <div className="flex items-center space-x-2">
-            <button
-              onClick={() => handleOpenAgreement(currentClient)}
-              className="px-3.5 py-1.5 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 text-indigo-700 rounded-lg text-xs font-bold flex items-center space-x-1.5 shadow-xs transition-colors"
-            >
-              <FileSignature className="h-3.5 w-3.5 text-indigo-600" />
-              <span>View Agreement</span>
-            </button>
-            <button
-              onClick={() => setViewMode('list')}
-              className="px-3.5 py-1.5 bg-white hover:bg-gray-50 border border-gray-300 rounded-lg text-xs font-bold text-slate-700 flex items-center space-x-1.5 shadow-xs transition-colors"
-            >
-              <ArrowLeft className="h-3.5 w-3.5" />
-              <span>Back</span>
-            </button>
-            <button
-              onClick={() => handleOpenEdit(currentClient)}
-              className="px-3.5 py-1.5 bg-[#2563eb] hover:bg-blue-700 text-white rounded-lg text-xs font-bold flex items-center space-x-1.5 shadow-xs transition-colors"
-            >
-              <Edit className="h-3.5 w-3.5" />
-              <span>Edit Client</span>
-            </button>
-          </div>
-        </div>
-
-        {/* 2-Column Responsive Layout */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 items-start">
-          {/* Left Column (2 Cols) */}
-          <div className="lg:col-span-2 space-y-4">
-            {/* Card 1: PERSONAL & CONTACT INFORMATION */}
-            <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-xs space-y-4">
-              <div className="flex items-center space-x-2 border-b border-gray-100 pb-3">
-                <User className="h-4 w-4 text-blue-500" />
-                <h2 className="text-[11px] font-bold text-slate-700 uppercase tracking-wider">
-                  PERSONAL & CONTACT INFORMATION
-                </h2>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-y-4 gap-x-4 text-xs">
-                <div>
-                  <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block mb-1">
-                    FULL NAME
-                  </span>
-                  <span className="font-bold text-slate-900 text-xs">{currentClient.name || '—'}</span>
-                </div>
-
-                <div>
-                  <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block mb-1">
-                    EMAIL ADDRESS
-                  </span>
-                  <span className="text-slate-800 text-xs">{currentClient.email || '—'}</span>
-                </div>
-
-                <div>
-                  <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block mb-1">
-                    PHONE NUMBER
-                  </span>
-                  <span className="font-mono text-slate-800 text-xs">{currentClient.phone || '—'}</span>
-                </div>
-
-                <div>
-                  <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block mb-1">
-                    CITY
-                  </span>
-                  <span className="text-slate-800 text-xs">{currentClient.city || '—'}</span>
-                </div>
-
-                <div>
-                  <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block mb-1">
-                    EMPLOYMENT STATUS
-                  </span>
-                  <span className="text-slate-800 text-xs">{currentClient.employment_status || 'Employed'}</span>
-                </div>
-
-                <div>
-                  <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block mb-1">
-                    EMPLOYMENT TYPE
-                  </span>
-                  <span className="text-slate-800 text-xs">{currentClient.employment_type || 'Salaried'}</span>
-                </div>
-
-                <div>
-                  <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block mb-1">
-                    CREATED ON
-                  </span>
-                  <span className="font-mono text-slate-800 text-xs">
-                    {currentClient.created_at ? currentClient.created_at.split('T')[0] : '2026-08-07'}
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            {/* Card 2: LOAN & DEBT PROFILE */}
-            <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-xs space-y-4">
-              <div className="flex items-center space-x-2 border-b border-gray-100 pb-3">
-                <Building2 className="h-4 w-4 text-rose-500" />
-                <h2 className="text-[11px] font-bold text-slate-700 uppercase tracking-wider">
-                  LOAN & DEBT PROFILE
-                </h2>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-y-4 gap-x-4 text-xs">
-                <div>
-                  <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block mb-1">
-                    OUTSTANDING AMOUNT
-                  </span>
-                  <span className="font-bold text-blue-600 text-xs">
-                    {currentClient.outstanding_range || currentClient.total_debt_bracket || '5 Lakh - 10 Lakh'}
-                  </span>
-                </div>
-
-                <div>
-                  <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block mb-1">
-                    MONTHLY INCOME
-                  </span>
-                  <span className="font-bold text-slate-900 text-xs">
-                    ₹ {(currentClient.monthly_income || 30000).toLocaleString('en-IN')}.00
-                  </span>
-                </div>
-
-                <div>
-                  <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block mb-1">
-                    CREDIT CARD DUES
-                  </span>
-                  <span className="text-rose-600 text-xs font-semibold">
-                    {currentClient.credit_card_dues || 'no'}
-                  </span>
-                </div>
-
-                <div>
-                  <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block mb-1">
-                    PERSONAL LOAN DUES
-                  </span>
-                  <span className="text-rose-600 text-xs font-semibold">
-                    {currentClient.personal_loan_dues || (currentClient.total_debt ? currentClient.total_debt.toLocaleString('en-IN') : '7,93,145')}
-                  </span>
-                </div>
-
-                <div>
-                  <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block mb-1">
-                    LOAN TYPE
-                  </span>
-                  <span className="text-slate-800 text-xs">
-                    {currentClient.loan_type || currentClient.service_needed || 'Personal Loan Settlement'}
-                  </span>
-                </div>
-
-                <div>
-                  <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block mb-1">
-                    DEFAULT STATUS
-                  </span>
-                  <span className="text-slate-800 text-xs">
-                    {currentClient.paying_emis || currentClient.default_status || 'Paying With Difficulty'}
-                  </span>
-                </div>
-
-                <div>
-                  <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block mb-1">
-                    HARASSMENT CALLS
-                  </span>
-                  <span className="text-rose-600 text-xs font-semibold">
-                    {currentClient.harassment_calls || 'Yes'}
-                  </span>
-                </div>
-
-                <div>
-                  <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block mb-1">
-                    SETTLEMENT NEEDED?
-                  </span>
-                  <span className="text-slate-900 text-xs font-bold">
-                    {currentClient.settlement_needed || 'YES'}
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            {/* Card 3: MONTHLY PAYMENT SCHEDULE & RETAINER LEDGER (STRICTLY VIEW-ONLY FOR EMPLOYEE) */}
-            <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-xs space-y-4">
-              <div className="flex items-center justify-between border-b border-gray-100 pb-3">
-                <div className="flex items-center space-x-2">
-                  <CreditCard className="h-4 w-4 text-emerald-600" />
-                  <h2 className="text-[11px] font-bold text-slate-700 uppercase tracking-wider">
-                    MONTHLY PAYMENT SCHEDULE & RETAINER SUMMARY (VIEW-ONLY)
-                  </h2>
-                </div>
-
-                <div className="flex items-center space-x-2">
-                  <span className="px-2 py-0.5 rounded bg-slate-100 border border-slate-200 text-slate-600 text-[10px] font-bold flex items-center space-x-1">
-                    <Lock className="h-3 w-3 text-slate-500" />
-                    <span>View Only</span>
-                  </span>
-
-                  {monthlyPaymentData?.history && monthlyPaymentData.history.length > 0 && (
-                    <button
-                      type="button"
-                      onClick={() => setIsHistoryModalOpen(true)}
-                      className="px-2.5 py-1 rounded-lg bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 text-indigo-700 text-[11px] font-bold transition-colors flex items-center space-x-1 shadow-2xs"
-                    >
-                      <History className="h-3 w-3" />
-                      <span>History ({monthlyPaymentData.history.length})</span>
-                    </button>
-                  )}
-                </div>
-              </div>
-
-              {/* Payment Summary Bar (7 Key Metrics) */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2.5 text-xs">
-                <div className="p-3 rounded-lg bg-gray-50 border border-gray-200">
-                  <span className="text-[9px] text-slate-400 font-bold uppercase tracking-wider block mb-1">
-                    MONTHLY SX FEE
-                  </span>
-                  <div className="text-sm font-black text-slate-900">
-                    {formatCurrency(monthlyPaymentData?.summary?.monthly_fee || currentClient.monthly_fee || 8000)}
-                  </div>
-                  <span className="text-[10px] text-slate-500 font-medium">/ Month</span>
-                </div>
-
-                <div className="p-3 rounded-lg bg-gray-50 border border-gray-200">
-                  <span className="text-[9px] text-slate-400 font-bold uppercase tracking-wider block mb-1">
-                    AGREEMENT DURATION
-                  </span>
-                  <div className="text-sm font-black text-blue-700">
-                    {monthlyPaymentData?.summary?.agreement_duration || '6 Months'}
-                  </div>
-                  <span className="text-[10px] text-slate-500 font-medium">
-                    {monthlyPaymentData?.summary?.duration_months || 6} Cycles
-                  </span>
-                </div>
-
-                <div className="p-3 rounded-lg bg-blue-50/60 border border-blue-200">
-                  <span className="text-[9px] text-blue-700 font-bold uppercase tracking-wider block mb-1">
-                    TOTAL AGREEMENT FEE
-                  </span>
-                  <div className="text-sm font-black text-blue-900">
-                    {formatCurrency(monthlyPaymentData?.summary?.total_agreement_fee || 48000)}
-                  </div>
-                  <span className="text-[10px] text-blue-600 font-medium">Full Retainer</span>
-                </div>
-
-                <div className="p-3 rounded-lg bg-emerald-50 border border-emerald-200">
-                  <span className="text-[9px] text-emerald-700 font-bold uppercase tracking-wider block mb-1">
-                    TOTAL RECEIVED
-                  </span>
-                  <div className="text-sm font-black text-emerald-800">
-                    {formatCurrency(monthlyPaymentData?.summary?.total_received || currentClient.total_received || 0)}
-                  </div>
-                  <span className="text-[10px] text-emerald-600 font-medium">Collected</span>
-                </div>
-
-                <div className="p-3 rounded-lg bg-rose-50 border border-rose-200">
-                  <span className="text-[9px] text-rose-700 font-bold uppercase tracking-wider block mb-1">
-                    TOTAL PENDING
-                  </span>
-                  <div className="text-sm font-black text-rose-800">
-                    {formatCurrency(
-                      monthlyPaymentData?.summary?.total_pending !== undefined
-                        ? monthlyPaymentData.summary.total_pending
-                        : Math.max(0, (monthlyPaymentData?.summary?.total_agreement_fee || 48000) - (currentClient.total_received || 0))
-                    )}
-                  </div>
-                  <span className="text-[10px] text-rose-600 font-medium">Balance</span>
-                </div>
-
-                <div className="p-3 rounded-lg bg-amber-50 border border-amber-200">
-                  <span className="text-[9px] text-amber-700 font-bold uppercase tracking-wider block mb-1">
-                    CURRENT MONTH RECEIVED
-                  </span>
-                  <div className="text-sm font-black text-amber-900">
-                    {formatCurrency(monthlyPaymentData?.summary?.current_month_received || 0)}
-                  </div>
-                  <span className="text-[10px] text-amber-700 font-medium">
-                    Month {monthlyPaymentData?.summary?.current_month_number || 1}
-                  </span>
-                </div>
-
-                <div className="p-3 rounded-lg bg-indigo-50 border border-indigo-200">
-                  <span className="text-[9px] text-indigo-700 font-bold uppercase tracking-wider block mb-1">
-                    CURRENT MONTH STATUS
-                  </span>
-                  <div className="text-sm font-black text-indigo-900">
-                    {monthlyPaymentData?.summary?.current_month_status || 'Pending'}
-                  </div>
-                  <span className="text-[10px] text-indigo-600 font-medium">Active Cycle</span>
-                </div>
-              </div>
-
-              {/* Monthly Schedule Table */}
-              <div className="border border-gray-200 rounded-lg overflow-hidden">
-                <table className="w-full text-left text-xs">
-                  <thead className="bg-gray-50 text-slate-600 uppercase text-[10px] font-bold tracking-wider border-b border-gray-200">
-                    <tr>
-                      <th className="py-2.5 px-3">Month</th>
-                      <th className="py-2.5 px-3">Expected</th>
-                      <th className="py-2.5 px-3">Received</th>
-                      <th className="py-2.5 px-3">Pending</th>
-                      <th className="py-2.5 px-3">Status</th>
-                      <th className="py-2.5 px-3">Remarks</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-200 text-slate-700">
-                    {monthlyPaymentData?.records && monthlyPaymentData.records.length > 0 ? (
-                      monthlyPaymentData.records.map((r: any) => (
-                        <tr key={r.id} className="hover:bg-gray-50/80">
-                          <td className="py-2.5 px-3 font-bold text-slate-900 whitespace-nowrap">
-                            Month {r.month_number}
-                          </td>
-                          <td className="py-2.5 px-3 font-bold text-slate-900 font-mono">
-                            {formatCurrency(r.expected_amount)}
-                          </td>
-                          <td className="py-2.5 px-3 font-black text-emerald-700 font-mono">
-                            {formatCurrency(r.received_amount || 0)}
-                          </td>
-                          <td className="py-2.5 px-3 font-bold text-rose-700 font-mono bg-rose-50/20">
-                            {formatCurrency(r.pending_amount || 0)}
-                          </td>
-                          <td className="py-2.5 px-3 whitespace-nowrap">
-                            <span
-                              className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                                r.payment_status === 'Paid'
-                                  ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
-                                  : r.payment_status === 'Partially Paid' || r.payment_status === 'Partial'
-                                  ? 'bg-amber-100 text-amber-800 border border-amber-300'
-                                  : r.payment_status === 'Overdue'
-                                  ? 'bg-rose-100 text-rose-800 border border-rose-300'
-                                  : 'bg-slate-100 text-slate-700 border border-slate-300'
-                              }`}
-                            >
-                              {r.payment_status || 'Pending'}
-                            </span>
-                          </td>
-                          <td className="py-2.5 px-3 text-slate-500 max-w-[150px] truncate" title={r.remarks || ''}>
-                            {r.remarks || '—'}
-                          </td>
-                        </tr>
-                      ))
-                    ) : (
-                      <tr>
-                        <td colSpan={6} className="py-8 text-center text-slate-400">
-                          Payment schedule is being initialized by Manager.
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-
-              {/* Informational Security Notice */}
-              <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg flex items-center justify-between text-[11px] text-slate-600">
-                <div className="flex items-center space-x-2">
-                  <ShieldCheck className="h-4 w-4 text-emerald-600 shrink-0" />
-                  <span>
-                    Payment status and receipts are updated and verified exclusively by authorized Manager / Admin roles.
-                  </span>
-                </div>
-                {monthlyPaymentData?.history && monthlyPaymentData.history.length > 0 && (
-                  <button
-                    type="button"
-                    onClick={() => setIsHistoryModalOpen(true)}
-                    className="font-bold text-indigo-600 hover:text-indigo-800 underline text-[11px] ml-2 shrink-0"
-                  >
-                    View Audit Log
-                  </button>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* Right Column (1 Col) */}
-          <div className="space-y-4">
-            {/* Card 1: SERVICE & PAYMENTS */}
-            <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-xs space-y-4">
-              <div className="flex items-center space-x-2 border-b border-gray-100 pb-3">
-                <CreditCard className="h-4 w-4 text-emerald-600" />
-                <h2 className="text-[11px] font-bold text-slate-700 uppercase tracking-wider">
-                  SERVICE & PAYMENTS
-                </h2>
-              </div>
-
-              <div>
-                <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block mb-1">
-                  CONSULTATION TIMING
-                </span>
-                <div className="flex items-center space-x-1.5 text-xs text-slate-700 font-medium">
-                  <Clock className="h-3.5 w-3.5 text-slate-400" />
-                  <span>{currentClient.consultation_timing || '10:00 AM - 12:00 PM'}</span>
-                </div>
-              </div>
-
-              <div className="pt-2 border-t border-gray-100 space-y-1">
-                <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">
-                  MONTHLY SX FEE
-                </span>
-                <div className="text-2xl font-black text-slate-900">
-                  ₹ {(monthlyPaymentData?.summary?.monthly_fee || currentClient.monthly_fee || 8000).toLocaleString('en-IN')}{' '}
-                  <span className="text-xs font-bold text-slate-500">/ Month</span>
-                </div>
-                <p className="text-[11px] text-slate-500 font-medium">
-                  Total Agreement Fee:{' '}
-                  <strong className="text-slate-800 font-bold">
-                    {formatCurrency(monthlyPaymentData?.summary?.total_agreement_fee || ((monthlyPaymentData?.summary?.monthly_fee || currentClient.monthly_fee || 8000) * 6))}
-                  </strong>{' '}
-                  ({monthlyPaymentData?.summary?.agreement_duration || '6 Months'})
-                </p>
-              </div>
-            </div>
-
-            {/* Card 2: SYSTEM STATUS */}
-            <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-xs space-y-4">
-              <div className="flex items-center space-x-2 border-b border-gray-100 pb-3">
-                <ShieldCheck className="h-4 w-4 text-amber-500" />
-                <h2 className="text-[11px] font-bold text-slate-700 uppercase tracking-wider">
-                  SYSTEM STATUS
-                </h2>
-              </div>
-
-              <div>
-                <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block mb-1">
-                  LEAD LIFECYCLE STATUS
-                </span>
-                <div className="font-black text-xs text-slate-900 uppercase">
-                  {currentClient.status === 'active' || currentClient.case_status === 'active' ? 'CONVERTED' : (currentClient.status || 'CONVERTED')}
-                </div>
-              </div>
-
-              <div className="pt-2">
-                <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block mb-1">
-                  ASSIGNED CONSULTANT NAME
-                </span>
-                <div className="flex items-center space-x-1.5 text-xs text-slate-800 font-semibold">
-                  <User className="h-3.5 w-3.5 text-slate-400" />
-                  <span>{currentClient.employee_name || 'Consultant'}</span>
-                </div>
-              </div>
-
-              <div className="pt-2">
-                <span className="text-slate-400 block text-[10px] uppercase font-bold">
-                  ASSIGNED ADVOCATE
-                </span>
-                {currentClient.advocate_name ? (
-                  <span className="font-bold text-emerald-700 text-xs flex items-center space-x-1.5 mt-0.5">
-                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 inline-block"></span>
-                    <span>{currentClient.advocate_name}</span>
-                  </span>
-                ) : (
-                  <span className="inline-flex items-center mt-0.5 px-2 py-0.5 rounded text-[10px] font-bold bg-amber-50 border border-amber-200 text-amber-700">
-                    Not Assigned
-                  </span>
-                )}
-                <p className="text-[10px] text-slate-400 mt-1 italic">Assigned by Manager only</p>
-              </div>
-            </div>
-
-            {/* Card 3: AGREEMENTS */}
-            <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-xs space-y-4">
-              <div className="flex items-center justify-between border-b border-gray-100 pb-3">
-                <div className="flex items-center space-x-2">
-                  <FileText className="h-4 w-4 text-emerald-600" />
-                  <h2 className="text-[11px] font-bold text-slate-700 uppercase tracking-wider">
-                    AGREEMENTS
-                  </h2>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (onNavigateToAgreement) {
-                      onNavigateToAgreement(currentClient);
-                    }
-                  }}
-                  className="px-2 py-0.5 rounded border border-emerald-500 text-emerald-600 hover:bg-emerald-50 font-bold text-xs transition-colors flex items-center space-x-1"
-                >
-                  <Plus className="h-3 w-3" />
-                  <span>New Agreement</span>
-                </button>
-              </div>
-
-              {clientAgreements && clientAgreements.length > 0 ? (
-                <div className="space-y-2">
-                  {clientAgreements.map((agr, idx) => (
-                    <div key={idx} className="p-3 bg-gray-50 border border-gray-200 rounded-lg flex items-center justify-between text-xs">
-                      <div>
-                        <span className="font-mono font-bold text-blue-700 block">{agr.agreement_number}</span>
-                        <span className="text-[11px] text-slate-500">Status: {agr.status}</span>
-                      </div>
-                      <span className="font-bold text-slate-900">{formatCurrency(agr.total_fee)}</span>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="py-6 text-center space-y-3">
-                  <p className="text-xs text-slate-400 font-medium">No Agreement Found</p>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (onNavigateToAgreement) {
-                        onNavigateToAgreement(currentClient);
-                      }
-                    }}
-                    className="px-4 py-1.5 rounded-lg bg-[#16a34a] hover:bg-emerald-700 text-white font-bold text-xs shadow-xs inline-flex items-center space-x-1 transition-colors"
-                  >
-                    <Plus className="h-3.5 w-3.5" />
-                    <span>Create Agreement</span>
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      </div>
+      <ClientDetailsUnifiedView
+        client={currentClient}
+        lenders={lendersList}
+        agreements={clientAgreements}
+        payments={clientPayments}
+        monthlyPaymentData={monthlyPaymentData}
+        userRole="employee"
+        initialTab="info"
+        onBack={() => setViewMode('list')}
+        onOpenAgreement={handleOpenAgreement}
+        onOpenEdit={handleOpenEdit}
+        onOpenLenders={handleOpenLenders}
+      />
     );
   }
 
@@ -1257,14 +744,10 @@ export const EmployeeClientsView: React.FC<EmployeeClientsViewProps> = ({
               <div className="flex items-center space-x-2">
                 <CreditCard className="h-4 w-4 text-emerald-600" />
                 <h3 className="text-xs font-bold text-[#1e40af] uppercase tracking-wider">
-                  4. PAYMENTS & FEE RECORD (VIEW-ONLY LEDGER)
+                  4. PAYMENTS & FEE RECORD
                 </h3>
               </div>
               <div className="flex items-center space-x-2">
-                <span className="px-2 py-0.5 rounded bg-amber-50 border border-amber-200 text-amber-800 text-[10px] font-bold flex items-center space-x-1">
-                  <Lock className="h-3 w-3 text-amber-600" />
-                  <span>Managed by Manager / Admin</span>
-                </span>
 
                 {monthlyPaymentData?.history && monthlyPaymentData.history.length > 0 && (
                   <button
@@ -1281,25 +764,41 @@ export const EmployeeClientsView: React.FC<EmployeeClientsViewProps> = ({
 
             {/* Summary Metrics (7 Key Values) */}
             <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2.5 text-xs">
-              <div className="p-2.5 bg-gray-50 border border-gray-200 rounded-lg">
+              <div className="p-2.5 bg-gray-50 border border-gray-200 rounded-lg group hover:border-blue-300 transition-colors">
                 <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
                   MONTHLY SX FEE
                 </span>
-                <div className="text-sm font-black text-slate-900">
-                  {formatCurrency(monthlyPaymentData?.summary?.monthly_fee || editFormData.monthly_fee || 8000)}
+                <div className="relative flex items-center">
+                  <span className="absolute left-0 top-1/2 -translate-y-1/2 text-sm font-black text-slate-900 pointer-events-none">₹</span>
+                  <input
+                    type="number"
+                    value={editFormData.monthly_fee || ''}
+                    onChange={(e) => setEditFormData({ ...editFormData, monthly_fee: parseFloat(e.target.value) || 0 })}
+                    className="w-full pl-3.5 bg-transparent border-b border-dashed border-gray-300 group-hover:border-blue-400 focus:border-blue-600 focus:outline-none text-sm font-black text-slate-900 placeholder:text-slate-300 transition-colors"
+                    placeholder="8000"
+                  />
                 </div>
-                <span className="text-[10px] text-slate-500 font-medium">/ Month</span>
+                <span className="text-[10px] text-slate-500 font-medium block mt-1">/ Month</span>
               </div>
 
-              <div className="p-2.5 bg-gray-50 border border-gray-200 rounded-lg">
+              <div className="p-2.5 bg-gray-50 border border-gray-200 rounded-lg group hover:border-blue-300 transition-colors">
                 <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
                   AGREEMENT DURATION
                 </span>
-                <div className="text-sm font-black text-blue-700">
-                  {monthlyPaymentData?.summary?.agreement_duration || editFormData.resolution_duration || '6 Months'}
+                <div className="flex items-center space-x-1">
+                  <input
+                    type="number"
+                    value={editFormData.duration_months || 6}
+                    onChange={(e) => {
+                      const val = parseInt(e.target.value) || 0;
+                      setEditFormData({ ...editFormData, duration_months: val, resolution_duration: `${val} Months` });
+                    }}
+                    className="w-8 bg-transparent border-b border-dashed border-gray-300 group-hover:border-blue-400 focus:border-blue-600 focus:outline-none text-sm font-black text-blue-700 text-center transition-colors"
+                  />
+                  <span className="text-sm font-black text-blue-700">Months</span>
                 </div>
-                <span className="text-[10px] text-slate-500 font-medium">
-                  {monthlyPaymentData?.summary?.duration_months || 6} Cycles
+                <span className="text-[10px] text-slate-500 font-medium block mt-1">
+                  {editFormData.duration_months || 6} Cycles
                 </span>
               </div>
 
@@ -1308,10 +807,7 @@ export const EmployeeClientsView: React.FC<EmployeeClientsViewProps> = ({
                   TOTAL AGREEMENT FEE
                 </span>
                 <div className="text-sm font-black text-blue-900">
-                  {formatCurrency(
-                    monthlyPaymentData?.summary?.total_agreement_fee ||
-                      ((monthlyPaymentData?.summary?.monthly_fee || editFormData.monthly_fee || 8000) * 6)
-                  )}
+                  {formatCurrency((editFormData.monthly_fee || 8000) * (editFormData.duration_months || 6))}
                 </div>
                 <span className="text-[10px] text-blue-600 font-medium">Full Value</span>
               </div>
@@ -1335,10 +831,10 @@ export const EmployeeClientsView: React.FC<EmployeeClientsViewProps> = ({
                     monthlyPaymentData?.summary?.total_pending !== undefined
                       ? monthlyPaymentData.summary.total_pending
                       : Math.max(
-                          0,
-                          (monthlyPaymentData?.summary?.total_agreement_fee || 48000) -
-                            (editFormData.total_received || 0)
-                        )
+                        0,
+                        (monthlyPaymentData?.summary?.total_agreement_fee || 48000) -
+                        (editFormData.total_received || 0)
+                      )
                   )}
                 </div>
                 <span className="text-[10px] text-rose-600 font-medium">Balance</span>
@@ -1371,90 +867,15 @@ export const EmployeeClientsView: React.FC<EmployeeClientsViewProps> = ({
               </div>
             </div>
 
-            {/* MONTHLY PAYMENT SCHEDULE TABLE */}
-            <div className="border border-gray-200 rounded-lg overflow-hidden space-y-0">
-              <div className="p-2.5 bg-gray-50/80 border-b border-gray-200 flex items-center justify-between">
-                <span className="text-[10px] font-bold text-slate-700 uppercase tracking-wider">
-                  MONTHLY PAYMENT SCHEDULE
-                </span>
-                <span className="text-[10px] font-semibold text-slate-500">
-                  Fixed independent expected fee per month
-                </span>
-              </div>
 
-              <table className="w-full text-left text-xs">
-                <thead className="bg-gray-50 text-slate-600 uppercase text-[10px] font-bold tracking-wider border-b border-gray-200">
-                  <tr>
-                    <th className="py-2.5 px-3">Month</th>
-                    <th className="py-2.5 px-3">Expected</th>
-                    <th className="py-2.5 px-3">Received</th>
-                    <th className="py-2.5 px-3">Pending</th>
-                    <th className="py-2.5 px-3">Status</th>
-                    <th className="py-2.5 px-3">Remarks</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-200 text-slate-700">
-                  {monthlyPaymentData?.records && monthlyPaymentData.records.length > 0 ? (
-                    monthlyPaymentData.records.map((r: any) => (
-                      <tr key={r.id} className="hover:bg-gray-50/80">
-                        <td className="py-2 px-3 font-bold text-slate-900 whitespace-nowrap">
-                          Month {r.month_number}
-                        </td>
-                        <td className="py-2 px-3 font-bold text-slate-900 font-mono">
-                          {formatCurrency(r.expected_amount)}
-                        </td>
-                        <td className="py-2 px-3 font-black text-emerald-700 font-mono">
-                          {formatCurrency(r.received_amount || 0)}
-                        </td>
-                        <td className="py-2 px-3 font-bold text-rose-700 font-mono bg-rose-50/20">
-                          {formatCurrency(r.pending_amount || 0)}
-                        </td>
-                        <td className="py-2 px-3 whitespace-nowrap">
-                          <span
-                            className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                              r.payment_status === 'Paid'
-                                ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
-                                : r.payment_status === 'Partially Paid' || r.payment_status === 'Partial'
-                                ? 'bg-amber-100 text-amber-800 border border-amber-300'
-                                : r.payment_status === 'Overdue'
-                                ? 'bg-rose-100 text-rose-800 border border-rose-300'
-                                : 'bg-slate-100 text-slate-700 border border-slate-300'
-                            }`}
-                          >
-                            {r.payment_status || 'Pending'}
-                          </span>
-                        </td>
-                        <td className="py-2 px-3 text-slate-500 max-w-[150px] truncate" title={r.remarks || ''}>
-                          {r.remarks || '—'}
-                        </td>
-                      </tr>
-                    ))
-                  ) : (
-                    <tr>
-                      <td colSpan={6} className="py-6 text-center text-slate-400">
-                        Payment schedule is being initialized by Manager.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-
-            <p className="text-[10px] text-slate-500 italic bg-slate-50 p-2.5 rounded-lg border border-slate-200">
-              Fee terms and payment updates are locked for employee view-only access. Only authorized Managers can modify fees or post received payments.
-            </p>
           </div>
 
           {/* Section 5: Legal & Advocate Assignment */}
           <div className="space-y-3">
             <div className="flex items-center justify-between border-b border-gray-200 pb-1.5">
               <h3 className="text-xs font-bold text-[#1e40af] uppercase tracking-wider flex items-center space-x-1.5">
-                <span>5. LEGAL & ADVOCATE ASSIGNMENT (VIEW-ONLY)</span>
+                <span>5. LEGAL & ADVOCATE ASSIGNMENT</span>
               </h3>
-              <span className="px-2 py-0.5 rounded bg-blue-50 border border-blue-200 text-blue-800 text-[10px] font-bold flex items-center space-x-1">
-                <Lock className="h-3 w-3 text-blue-600" />
-                <span>Assigned by Manager Only</span>
-              </span>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -1467,9 +888,8 @@ export const EmployeeClientsView: React.FC<EmployeeClientsViewProps> = ({
                       <span>{editFormData.advocate_name}</span>
                     </span>
                   ) : (
-                    <span className="text-slate-400 italic">Not Assigned (Manager assigns advocate)</span>
+                    <span className="text-slate-400 italic">Not Assigned</span>
                   )}
-                  <span className="text-[10px] text-slate-400 font-mono">View Only</span>
                 </div>
               </div>
               <div>
@@ -1480,19 +900,6 @@ export const EmployeeClientsView: React.FC<EmployeeClientsViewProps> = ({
                   value={editFormData.employee_name || 'Dhruv Consultant'}
                   className="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-slate-700 text-xs font-medium cursor-not-allowed"
                 />
-              </div>
-            </div>
-
-            {/* Advocate Assignment Notice */}
-            <div className="p-3 rounded-lg bg-blue-50/60 border border-blue-200 flex items-start space-x-3 text-xs">
-              <div className="shrink-0 h-8 w-8 rounded-lg bg-blue-100 border border-blue-300 flex items-center justify-center">
-                <ShieldCheck className="h-4 w-4 text-blue-700" />
-              </div>
-              <div className="flex-1">
-                <p className="text-[11px] font-bold text-blue-900 mb-0.5">Legal Advocate Control</p>
-                <p className="text-[11px] text-blue-800">
-                  Advocate allocation and case defense assignments are controlled exclusively by authorized Legal Managers. Employees cannot assign or modify advocate details.
-                </p>
               </div>
             </div>
 
@@ -1876,10 +1283,10 @@ export const EmployeeClientsView: React.FC<EmployeeClientsViewProps> = ({
                       <td className="py-2.5 px-3">
                         <span
                           className={`px-2 py-0.5 rounded text-[10px] font-bold ${h.payment_status === 'Paid'
-                              ? 'bg-emerald-100 text-emerald-800'
-                              : h.payment_status === 'Partially Paid'
-                                ? 'bg-amber-100 text-amber-800'
-                                : 'bg-slate-100 text-slate-700'
+                            ? 'bg-emerald-100 text-emerald-800'
+                            : h.payment_status === 'Partially Paid'
+                              ? 'bg-amber-100 text-amber-800'
+                              : 'bg-slate-100 text-slate-700'
                             }`}
                         >
                           {h.payment_status}

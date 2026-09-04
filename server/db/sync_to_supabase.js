@@ -12,30 +12,30 @@ async function syncAllToSupabase() {
 
   // List of tables to sync in proper foreign-key dependency order
   const syncOrder = [
-    { table: 'departments', select: '*' },
-    { table: 'manager_types', select: '*' },
-    { table: 'users', select: '*' },
-    { table: 'teams', select: '*' },
-    { table: 'user_permissions', select: '*' },
-    { table: 'advocates', select: '*' },
-    { table: 'fee_plans', select: '*' },
-    { table: 'leads', select: '*' },
-    { table: 'follow_ups', select: '*' },
-    { table: 'clients', select: '*' },
-    { table: 'lenders', select: '*' },
-    { table: 'agreements', select: '*' },
-    { table: 'monthly_payment_records', select: '*' },
-    { table: 'monthly_payment_history', select: '*' },
-    { table: 'payments', select: '*' },
-    { table: 'tasks', select: '*' },
-    { table: 'advocate_assignment_history', select: '*' },
-    { table: 'payment_due_notifications', select: '*' },
-    { table: 'lead_imports', select: '*' },
-    { table: 'lead_distributions', select: '*' },
-    { table: 'staff_extended_profiles', select: '*' },
-    { table: 'staff_kyc', select: '*' },
-    { table: 'staff_advocate_details', select: '*' },
-    { table: 'audit_logs', select: '*' }
+    { table: 'departments', select: '*', primaryKey: 'id' },
+    { table: 'manager_types', select: '*', primaryKey: 'id' },
+    { table: 'users', select: '*', primaryKey: 'id' },
+    { table: 'teams', select: '*', primaryKey: 'id' },
+    { table: 'user_permissions', select: '*', primaryKey: 'id' },
+    { table: 'advocates', select: '*', primaryKey: 'id' },
+    { table: 'fee_plans', select: '*', primaryKey: 'id' },
+    { table: 'leads', select: '*', primaryKey: 'id' },
+    { table: 'follow_ups', select: '*', primaryKey: 'id' },
+    { table: 'clients', select: '*', primaryKey: 'id' },
+    { table: 'lenders', select: '*', primaryKey: 'id' },
+    { table: 'agreements', select: '*', primaryKey: 'id' },
+    { table: 'monthly_payment_records', select: '*', primaryKey: 'id' },
+    { table: 'monthly_payment_history', select: '*', primaryKey: 'id' },
+    { table: 'payments', select: '*', primaryKey: 'id' },
+    { table: 'tasks', select: '*', primaryKey: 'id' },
+    { table: 'advocate_assignment_history', select: '*', primaryKey: 'id' },
+    { table: 'payment_due_notifications', select: '*', primaryKey: 'id' },
+    { table: 'lead_imports', select: '*', primaryKey: 'id' },
+    { table: 'lead_distributions', select: '*', primaryKey: 'id' },
+    { table: 'staff_extended_profiles', select: '*', primaryKey: 'user_id' },
+    { table: 'staff_kyc', select: '*', primaryKey: 'id' },
+    { table: 'staff_advocate_details', select: '*', primaryKey: 'user_id' },
+    { table: 'audit_logs', select: '*', primaryKey: 'id' }
   ];
 
   let totalSynced = 0;
@@ -43,12 +43,13 @@ async function syncAllToSupabase() {
 
   for (const item of syncOrder) {
     try {
+      const pKey = item.primaryKey || 'id';
       const records = db.prepare(`SELECT ${item.select} FROM ${item.table}`).all();
       console.log(`\nSyncing table: ${item.table} (${records.length} records in local DB)...`);
 
       if (records.length === 0) {
-        // Try a simple select from Supabase to check if table exists
-        const { error } = await supabase.from(item.table).select('id').limit(1);
+        // Check if table exists in Supabase
+        const { error } = await supabase.from(item.table).select(pKey).limit(1);
         if (error) {
           if (error.code === 'PGRST205' || error.message.includes('Could not find the table')) {
             missingTables.push(item.table);
@@ -62,10 +63,65 @@ async function syncAllToSupabase() {
         continue;
       }
 
+      // Format payload based on table specific schema nuances if needed
+      let payload = records;
+      if (item.table === 'audit_logs') {
+        payload = records.map(r => ({
+          id: r.id,
+          user_id: r.user_id || '4',
+          action: r.action || 'ACTION',
+          entity_type: r.module || 'System',
+          entity_id: r.record_id || '',
+          details: r.details_json || '',
+          details_json: r.details_json || '{}',
+          ip_address: r.ip_address || '',
+          created_at: r.created_at || new Date().toISOString()
+        }));
+      } else if (item.table === 'leads') {
+        payload = records.map(r => ({
+          id: Math.floor(Number(r.id)),
+          lead_id: r.lead_number || `LD-${r.id}`,
+          name: r.name || 'Unnamed',
+          phone: r.phone || '',
+          email: r.email || '',
+          city: r.city || '',
+          outstanding_amount: String(Math.floor(Number(r.total_debt || r.loan_amount || 0))),
+          monthly_income: String(Math.floor(Number(r.monthly_income || 0))),
+          lead_status: r.status || 'New',
+          created_at: r.created_at || new Date().toISOString()
+        }));
+      } else if (item.table === 'clients') {
+        payload = records.map(r => ({
+          id: Math.floor(Number(r.id)),
+          client_id: r.client_number || `CL-${r.id}`,
+          name: r.name || 'Unnamed',
+          phone: r.phone || '',
+          email: r.email || '',
+          city: r.city || '',
+          service_fee: Math.floor(Number(r.sx_fee || 0)),
+          pending_amount: Math.floor(Number(r.pending_amount || 0)),
+          case_status: r.case_status || 'Active',
+          created_at: r.created_at || new Date().toISOString()
+        }));
+      } else if (item.table === 'agreements') {
+        payload = records.map(r => ({
+          id: Math.floor(Number(r.id)),
+          agreement_id: r.agreement_number || `AGR-${r.id}`,
+          client_id_ref: r.client_id ? Math.floor(Number(r.client_id)) : null,
+          client_name: r.name || '',
+          phone: r.phone || '',
+          email: r.email || '',
+          loan_amount: Math.floor(Number(r.total_fee || 0)),
+          resolution_duration: r.resolution_duration || '',
+          status: r.status || 'Active',
+          created_at: r.created_at || new Date().toISOString()
+        }));
+      }
+
       // Upsert records into Supabase in batches
       const { data, error } = await supabase
         .from(item.table)
-        .upsert(records, { onConflict: 'id' });
+        .upsert(payload, { onConflict: pKey });
 
       if (error) {
         if (error.code === 'PGRST205' || error.message.includes('Could not find the table')) {

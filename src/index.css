@@ -12,13 +12,16 @@
     width: 6px;
     height: 6px;
   }
+
   ::-webkit-scrollbar-track {
     background: #090e17;
   }
+
   ::-webkit-scrollbar-thumb {
     background: #1e293b;
     border-radius: 4px;
   }
+
   ::-webkit-scrollbar-thumb:hover {
     background: #334155;
   }
@@ -42,8 +45,13 @@
 
 /* Custom animation utils */
 @keyframes fadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
 }
 
 .animate-fade-in {
@@ -56,16 +64,45 @@
 /* Sidebar: 500 | Backdrop: 900 | Modal: 1000                */
 /* Modal Dropdown: 1100 | Toast: 2000 | Tooltip: 3000        */
 /* ========================================================= */
-.z-layer-base { z-index: 0; }
-.z-layer-sticky { z-index: 10; }
-.z-layer-dropdown { z-index: 100; }
-.z-layer-popover { z-index: 200; }
-.z-layer-sidebar { z-index: 500; }
-.z-layer-backdrop { z-index: 900; }
-.z-layer-modal { z-index: 1000; }
-.z-layer-modal-dropdown { z-index: 1100; }
-.z-layer-toast { z-index: 2000; }
-.z-layer-tooltip { z-index: 3000; }
+.z-layer-base {
+  z-index: 0;
+}
+
+.z-layer-sticky {
+  z-index: 10;
+}
+
+.z-layer-dropdown {
+  z-index: 100;
+}
+
+.z-layer-popover {
+  z-index: 200;
+}
+
+.z-layer-sidebar {
+  z-index: 500;
+}
+
+.z-layer-backdrop {
+  z-index: 900;
+}
+
+.z-layer-modal {
+  z-index: 1000;
+}
+
+.z-layer-modal-dropdown {
+  z-index: 1100;
+}
+
+.z-layer-toast {
+  z-index: 2000;
+}
+
+.z-layer-tooltip {
+  z-index: 3000;
+}
 
 /* Pointer events & focus utilities */
 .clickable-target {
@@ -74,7 +111,7 @@
 }
 
 /* ========================================================= */
-/* STRICT PRINT ISOLATION - FLAWLESS 11-PAGE A4 AGREEMENT     */
+/* STRICT PRINT RULES - FLAWLESS A4 AGREEMENTS & LEGAL NOTICES */
 /* ========================================================= */
 @media print {
   @page {
@@ -82,45 +119,47 @@
     margin: 0mm;
   }
 
-  html, body {
+  html,
+  body,
+  #root {
     margin: 0 !important;
     padding: 0 !important;
     background: #ffffff !important;
     color: #0f172a !important;
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
-    width: 210mm !important;
+    width: 100% !important;
     height: auto !important;
+    overflow: visible !important;
   }
 
-  /* Hide everything on the page except the agreement printable doc */
-  body * {
-    visibility: hidden;
+  /* Hide app navigation, headers, sidebars, buttons, and sticky bars during print */
+  header,
+  nav,
+  aside,
+  footer,
+  button,
+  [role="navigation"],
+  .print-hidden,
+  .print\:hidden {
+    display: none !important;
   }
 
-  #agreement-printable-doc,
-  #agreement-printable-doc * {
-    visibility: visible !important;
+  /* Allow all parent wrappers to display their children naturally */
+  main,
+  div,
+  section {
+    overflow: visible !important;
+    height: auto !important;
+    max-height: none !important;
   }
 
-  #agreement-printable-doc {
-    position: absolute !important;
-    left: 0 !important;
-    top: 0 !important;
-    width: 210mm !important;
-    margin: 0 !important;
-    padding: 0 !important;
-    background: #ffffff !important;
-    display: block !important;
-    z-index: 999999 !important;
-  }
-
-  /* Individual A4 Page Card strictly bounded to exact A4 size */
+  /* Individual A4 Page Card strictly bounded to exact A4 size with crisp top header alignment */
   .a4-page-card {
     width: 210mm !important;
     min-height: 297mm !important;
-    padding: 8mm 15mm 8mm 15mm !important;
-    margin: 0 !important;
+    padding: 10mm 20mm 18mm 20mm !important;
+    margin: 0 auto !important;
     border: none !important;
     box-shadow: none !important;
     border-radius: 0 !important;
@@ -128,9 +167,7 @@
     break-after: page !important;
     page-break-inside: avoid !important;
     break-inside: avoid !important;
-    display: flex !important;
-    flex-direction: column !important;
-    justify-content: space-between !important;
+    display: block !important;
     box-sizing: border-box !important;
     background: #ffffff !important;
   }
@@ -138,10 +175,5 @@
   .a4-page-card:last-child {
     page-break-after: auto !important;
     break-after: auto !important;
-  }
-
-  /* Completely remove non-printable elements */
-  header, nav, aside, footer, [role="navigation"], .print-hidden, .print\:hidden {
-    display: none !important;
   }
 }

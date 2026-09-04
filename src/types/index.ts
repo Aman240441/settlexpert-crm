@@ -295,3 +295,25 @@ export interface DashboardStats {
   recentPayments: Payment[];
   recentActivity: AuditLog[];
 }
+
+export interface ClientComplaint {
+  id: string;
+  complaint_number: string;
+  client_id: string;
+  client_name: string;
+  client_phone?: string;
+  client_email?: string;
+  complaint_type: string;
+  bank_name: string;
+  loan_account_no?: string;
+  tweet_url?: string;
+  complaint_ref_no?: string;
+  screenshot_url?: string;
+  file_name?: string;
+  description?: string;
+  status: 'Filed' | 'Under Review' | 'Resolved' | 'Closed';
+  created_by?: string;
+  created_at: string;
+  updated_at?: string;
+}
+

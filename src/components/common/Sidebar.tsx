@@ -93,6 +93,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         { id: 'lead-import-distribution', label: 'Lead Import & Distribution', icon: FileSpreadsheet },
         { id: 'clients', label: 'Clients', icon: Users },
         { id: 'agreements', label: 'Agreements', icon: FileSignature },
+        { id: 'onboarding-form', label: 'Onboarding Forms', icon: FileSpreadsheet },
       ],
     },
     {
@@ -177,8 +178,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 key={group.id}
                 onClick={() => onNavigate(group.id)}
                 className={`w-full flex items-center space-x-3 px-3.5 py-2.5 rounded-xl transition-all text-left ${currentSection === group.id
-                    ? 'bg-[#111827] text-white shadow-md'
-                    : 'text-slate-700 hover:bg-[#b8ccb6] hover:text-slate-900'
+                  ? 'bg-[#111827] text-white shadow-md'
+                  : 'text-slate-700 hover:bg-[#b8ccb6] hover:text-slate-900'
                   }`}
               >
                 <GroupIcon className={`h-4 w-4 shrink-0 ${currentSection === group.id ? 'text-white' : 'text-slate-700'}`} />
@@ -192,8 +193,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
               <button
                 onClick={() => toggleGroup(group.id)}
                 className={`w-full flex items-center justify-between px-3.5 py-2 rounded-xl transition-all text-left ${isChildActive
-                    ? 'bg-[#111827] text-white shadow-md'
-                    : 'text-slate-700 hover:bg-[#b8ccb6] hover:text-slate-900'
+                  ? 'bg-[#111827] text-white shadow-md'
+                  : 'text-slate-700 hover:bg-[#b8ccb6] hover:text-slate-900'
                   }`}
               >
                 <div className="flex items-center space-x-3">
@@ -221,8 +222,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
                         key={child.id}
                         onClick={() => onNavigate(child.id)}
                         className={`w-full flex items-center justify-between px-3 py-1.5 rounded-lg text-[11px] font-medium transition-colors text-left ${isActive
-                            ? 'bg-[#e2ede0] text-[#166534] font-bold shadow-2xs'
-                            : 'text-slate-700 hover:text-slate-900 hover:bg-[#b8ccb6]/60'
+                          ? 'bg-[#e2ede0] text-[#166534] font-bold shadow-2xs'
+                          : 'text-slate-700 hover:text-slate-900 hover:bg-[#b8ccb6]/60'
                           }`}
                       >
                         <div className="flex items-center space-x-2">

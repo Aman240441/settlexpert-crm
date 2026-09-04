@@ -195,16 +195,442 @@ router.post('/cases/:id/tasks', authenticateToken, requireAdvocateOrAdmin, (req,
   }
 });
 
-// GET /api/advocate-portal/profile
-router.get('/profile', authenticateToken, requireAdvocateOrAdmin, (req, res) => {
+// =====================================================
+// SEQUENTIAL NUMBER GENERATORS
+// =====================================================
+function generateLegalNoticeNumber() {
+  const rows = db.prepare(`SELECT notice_number as num FROM legal_notices WHERE notice_number LIKE 'LN-%'`).all();
+  let maxNum = 0;
+  for (const r of rows) {
+    if (r.num) {
+      const match = r.num.match(/^LN-(\d+)/);
+      if (match) {
+        const n = parseInt(match[1], 10);
+        if (n > maxNum) maxNum = n;
+      }
+    }
+  }
+  return `LN-${String(maxNum + 1).padStart(4, '0')}`;
+}
+
+function generateDemandNoticeNumber() {
+  const rows = db.prepare(`SELECT demand_number as num FROM demand_notices WHERE demand_number LIKE 'DN-%'`).all();
+  let maxNum = 0;
+  for (const r of rows) {
+    if (r.num) {
+      const match = r.num.match(/^DN-(\d+)/);
+      if (match) {
+        const n = parseInt(match[1], 10);
+        if (n > maxNum) maxNum = n;
+      }
+    }
+  }
+  return `DN-${String(maxNum + 1).padStart(4, '0')}`;
+}
+
+// =====================================================
+// LEGAL NOTICES CRUD
+// =====================================================
+// GET /api/advocate-portal/legal-notices
+router.get('/legal-notices', authenticateToken, requireAdvocateOrAdmin, (req, res) => {
   try {
-    const { advocateRecord } = getAdvocateScope(req);
+    const { isAdmin, advocateId } = getAdvocateScope(req);
+    const { search, status, notice_type, client_id, date, from_date, to_date, page = 1, limit = 25 } = req.query;
+
+    let sql = `
+      SELECT ln.*, c.name as client_name, c.client_number, c.phone as client_phone, c.city as client_city
+      FROM legal_notices ln
+      LEFT JOIN clients c ON ln.client_id = c.id
+      WHERE 1=1
+    `;
+    const params = [];
+
+    if (!isAdmin && advocateId) {
+      sql += ` AND (ln.advocate_id = ? OR c.advocate_id = ?)`;
+      params.push(advocateId, advocateId);
+    }
+
+    if (search) {
+      const cleanSearch = `%${search.trim().toLowerCase()}%`;
+      sql += ` AND (ln.notice_number LIKE ? OR ln.bank_name LIKE ? OR c.name LIKE ? OR c.phone LIKE ? OR ln.speed_post_number LIKE ?)`;
+      params.push(cleanSearch, cleanSearch, cleanSearch, cleanSearch, cleanSearch);
+    }
+
+    if (status && status !== 'all') {
+      sql += ` AND ln.status = ?`;
+      params.push(status);
+    }
+
+    if (notice_type && notice_type !== 'all') {
+      sql += ` AND ln.notice_type = ?`;
+      params.push(notice_type);
+    }
+
+    if (client_id) {
+      sql += ` AND ln.client_id = ?`;
+      params.push(client_id);
+    }
+
+    if (from_date && to_date) {
+      sql += ` AND date(ln.notice_date) >= date(?) AND date(ln.notice_date) <= date(?)`;
+      params.push(from_date, to_date);
+    } else if (date) {
+      sql += ` AND date(ln.notice_date) = date(?)`;
+      params.push(date);
+    }
+
+    // Counts by status
+    const allCount = db.prepare(`SELECT COUNT(*) as c FROM legal_notices`).get().c;
+    const dispatchedCount = db.prepare(`SELECT COUNT(*) as c FROM legal_notices WHERE status = 'Dispatched'`).get().c;
+    const deliveredCount = db.prepare(`SELECT COUNT(*) as c FROM legal_notices WHERE status = 'Delivered'`).get().c;
+    const draftCount = db.prepare(`SELECT COUNT(*) as c FROM legal_notices WHERE status = 'Draft'`).get().c;
+
+    sql += ` ORDER BY ln.created_at DESC LIMIT ? OFFSET ?`;
+    const offset = (parseInt(page) - 1) * parseInt(limit);
+    params.push(parseInt(limit), offset);
+
+    const notices = db.prepare(sql).all(...params);
+
     res.json({
-      user: req.user,
-      advocate: advocateRecord
+      notices,
+      statusCounts: {
+        all: allCount,
+        dispatched: dispatchedCount,
+        delivered: deliveredCount,
+        draft: draftCount
+      },
+      pagination: {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        total: notices.length
+      }
     });
   } catch (err) {
-    res.status(500).json({ error: 'Failed to fetch advocate profile' });
+    console.error('Fetch legal notices error:', err);
+    res.status(500).json({ error: 'Failed to fetch legal notices' });
+  }
+});
+
+// POST /api/advocate-portal/legal-notices
+router.post('/legal-notices', authenticateToken, requireAdvocateOrAdmin, (req, res) => {
+  try {
+    const {
+      client_id,
+      bank_name,
+      loan_account_no,
+      notice_type = 'Anti-Harassment Notice',
+      notice_subject,
+      notice_content,
+      notice_date,
+      dispatch_date,
+      speed_post_number,
+      tracking_url,
+      status = 'Draft'
+    } = req.body;
+
+    if (!bank_name) return res.status(400).json({ error: 'Bank Name is required' });
+
+    let client = null;
+    if (client_id) {
+      client = db.prepare(`SELECT id, name, client_number, phone FROM clients WHERE id = ?`).get(client_id);
+    }
+
+    const id = 'ln-' + uuidv4().slice(0, 8);
+    const notice_number = generateLegalNoticeNumber();
+    const finalNoticeDate = notice_date || new Date().toISOString().split('T')[0];
+
+    db.prepare(`
+      INSERT INTO legal_notices (
+        id, notice_number, client_id, client_name, bank_name, loan_account_no,
+        notice_type, notice_subject, notice_content, notice_date, dispatch_date,
+        speed_post_number, tracking_url, status, advocate_id, advocate_name, created_by,
+        created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+    `).run(
+      id,
+      notice_number,
+      client?.id || null,
+      client?.name || req.body.client_name || 'Client',
+      bank_name.trim(),
+      loan_account_no || null,
+      notice_type,
+      notice_subject || `Legal Notice regarding Loan Accounts with ${bank_name}`,
+      notice_content || null,
+      finalNoticeDate,
+      dispatch_date || null,
+      speed_post_number || null,
+      tracking_url || (speed_post_number ? `https://www.indiapost.gov.in/_layouts/15/dop.portal.tracking/trackconsignment.aspx` : null),
+      status,
+      req.user.id,
+      req.user.name,
+      req.user.name
+    );
+
+    logAudit(req, 'Legal Notice Issued', 'Legal Notices', id, { notice_number, bank_name });
+    res.status(201).json({ message: `Legal Notice ${notice_number} generated successfully`, id, notice_number });
+  } catch (err) {
+    console.error('Create legal notice error:', err);
+    res.status(500).json({ error: err.message || 'Failed to create legal notice' });
+  }
+});
+
+// PUT /api/advocate-portal/legal-notices/:id
+router.put('/legal-notices/:id', authenticateToken, requireAdvocateOrAdmin, (req, res) => {
+  try {
+    const existing = db.prepare(`SELECT * FROM legal_notices WHERE id = ?`).get(req.params.id);
+    if (!existing) return res.status(404).json({ error: 'Legal notice not found' });
+
+    const {
+      bank_name,
+      loan_account_no,
+      notice_type,
+      notice_subject,
+      notice_content,
+      notice_date,
+      dispatch_date,
+      speed_post_number,
+      tracking_url,
+      status
+    } = req.body;
+
+    db.prepare(`
+      UPDATE legal_notices SET
+        bank_name = COALESCE(?, bank_name),
+        loan_account_no = COALESCE(?, loan_account_no),
+        notice_type = COALESCE(?, notice_type),
+        notice_subject = COALESCE(?, notice_subject),
+        notice_content = COALESCE(?, notice_content),
+        notice_date = COALESCE(?, notice_date),
+        dispatch_date = COALESCE(?, dispatch_date),
+        speed_post_number = COALESCE(?, speed_post_number),
+        tracking_url = COALESCE(?, tracking_url),
+        status = COALESCE(?, status),
+        updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `).run(
+      bank_name,
+      loan_account_no,
+      notice_type,
+      notice_subject,
+      notice_content,
+      notice_date,
+      dispatch_date,
+      speed_post_number,
+      tracking_url,
+      status,
+      req.params.id
+    );
+
+    res.json({ message: 'Legal notice updated successfully' });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to update legal notice' });
+  }
+});
+
+// DELETE /api/advocate-portal/legal-notices/:id
+router.delete('/legal-notices/:id', authenticateToken, requireAdvocateOrAdmin, (req, res) => {
+  try {
+    db.prepare(`DELETE FROM legal_notices WHERE id = ?`).run(req.params.id);
+    res.json({ message: 'Legal notice deleted' });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to delete legal notice' });
+  }
+});
+
+// =====================================================
+// DEMAND NOTICES CRUD
+// =====================================================
+// GET /api/advocate-portal/demand-notices
+router.get('/demand-notices', authenticateToken, requireAdvocateOrAdmin, (req, res) => {
+  try {
+    const { isAdmin, advocateId } = getAdvocateScope(req);
+    const { search, status, demand_type, client_id, page = 1, limit = 25 } = req.query;
+
+    let sql = `
+      SELECT dn.*, c.name as client_name, c.client_number, c.phone as client_phone, c.city as client_city
+      FROM demand_notices dn
+      LEFT JOIN clients c ON dn.client_id = c.id
+      WHERE 1=1
+    `;
+    const params = [];
+
+    if (!isAdmin && advocateId) {
+      sql += ` AND (dn.advocate_id = ? OR c.advocate_id = ?)`;
+      params.push(advocateId, advocateId);
+    }
+
+    if (search) {
+      const cleanSearch = `%${search.trim().toLowerCase()}%`;
+      sql += ` AND (dn.demand_number LIKE ? OR dn.bank_name LIKE ? OR c.name LIKE ? OR c.phone LIKE ? OR dn.loan_account_no LIKE ?)`;
+      params.push(cleanSearch, cleanSearch, cleanSearch, cleanSearch, cleanSearch);
+    }
+
+    if (status && status !== 'all') {
+      sql += ` AND dn.status = ?`;
+      params.push(status);
+    }
+
+    if (demand_type && demand_type !== 'all') {
+      sql += ` AND dn.demand_type = ?`;
+      params.push(demand_type);
+    }
+
+    if (client_id) {
+      sql += ` AND dn.client_id = ?`;
+      params.push(client_id);
+    }
+
+    const allCount = db.prepare(`SELECT COUNT(*) as c FROM demand_notices`).get().c;
+    const pendingCount = db.prepare(`SELECT COUNT(*) as c FROM demand_notices WHERE status = 'Pending Review'`).get().c;
+    const repliedCount = db.prepare(`SELECT COUNT(*) as c FROM demand_notices WHERE status = 'Reply Dispatched' OR status = 'Reply Drafted'`).get().c;
+    const settledCount = db.prepare(`SELECT COUNT(*) as c FROM demand_notices WHERE status = 'Settlement Agreed'`).get().c;
+
+    sql += ` ORDER BY dn.created_at DESC LIMIT ? OFFSET ?`;
+    const offset = (parseInt(page) - 1) * parseInt(limit);
+    params.push(parseInt(limit), offset);
+
+    const notices = db.prepare(sql).all(...params);
+
+    res.json({
+      demandNotices: notices,
+      statusCounts: {
+        all: allCount,
+        pending: pendingCount,
+        replied: repliedCount,
+        settled: settledCount
+      },
+      pagination: {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        total: notices.length
+      }
+    });
+  } catch (err) {
+    console.error('Fetch demand notices error:', err);
+    res.status(500).json({ error: 'Failed to fetch demand notices' });
+  }
+});
+
+// POST /api/advocate-portal/demand-notices
+router.post('/demand-notices', authenticateToken, requireAdvocateOrAdmin, (req, res) => {
+  try {
+    const {
+      client_id,
+      bank_name,
+      loan_account_no,
+      demand_type = 'Incoming Loan Recall Demand',
+      demand_amount = 0,
+      settlement_offer_amount = 0,
+      notice_date,
+      reply_due_date,
+      status = 'Pending Review',
+      remarks,
+      file_attachment
+    } = req.body;
+
+    if (!bank_name) return res.status(400).json({ error: 'Bank Name is required' });
+
+    let client = null;
+    if (client_id) {
+      client = db.prepare(`SELECT id, name, client_number, phone FROM clients WHERE id = ?`).get(client_id);
+    }
+
+    const id = 'dn-' + uuidv4().slice(0, 8);
+    const demand_number = generateDemandNoticeNumber();
+    const finalNoticeDate = notice_date || new Date().toISOString().split('T')[0];
+
+    db.prepare(`
+      INSERT INTO demand_notices (
+        id, demand_number, client_id, client_name, bank_name, loan_account_no,
+        demand_type, demand_amount, settlement_offer_amount, notice_date, reply_due_date,
+        status, remarks, file_attachment, advocate_id, advocate_name, created_by,
+        created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+    `).run(
+      id,
+      demand_number,
+      client?.id || null,
+      client?.name || req.body.client_name || 'Client',
+      bank_name.trim(),
+      loan_account_no || null,
+      demand_type,
+      parseFloat(demand_amount) || 0,
+      parseFloat(settlement_offer_amount) || Math.round((parseFloat(demand_amount) || 0) * 0.45),
+      finalNoticeDate,
+      reply_due_date || null,
+      status,
+      remarks || null,
+      file_attachment || null,
+      req.user.id,
+      req.user.name,
+      req.user.name
+    );
+
+    logAudit(req, 'Demand Notice Logged', 'Demand Notices', id, { demand_number, bank_name, demand_amount });
+    res.status(201).json({ message: `Demand Notice ${demand_number} recorded successfully`, id, demand_number });
+  } catch (err) {
+    console.error('Create demand notice error:', err);
+    res.status(500).json({ error: err.message || 'Failed to create demand notice' });
+  }
+});
+
+// PUT /api/advocate-portal/demand-notices/:id
+router.put('/demand-notices/:id', authenticateToken, requireAdvocateOrAdmin, (req, res) => {
+  try {
+    const existing = db.prepare(`SELECT * FROM demand_notices WHERE id = ?`).get(req.params.id);
+    if (!existing) return res.status(404).json({ error: 'Demand notice not found' });
+
+    const {
+      bank_name,
+      loan_account_no,
+      demand_type,
+      demand_amount,
+      settlement_offer_amount,
+      notice_date,
+      reply_due_date,
+      status,
+      remarks
+    } = req.body;
+
+    db.prepare(`
+      UPDATE demand_notices SET
+        bank_name = COALESCE(?, bank_name),
+        loan_account_no = COALESCE(?, loan_account_no),
+        demand_type = COALESCE(?, demand_type),
+        demand_amount = COALESCE(?, demand_amount),
+        settlement_offer_amount = COALESCE(?, settlement_offer_amount),
+        notice_date = COALESCE(?, notice_date),
+        reply_due_date = COALESCE(?, reply_due_date),
+        status = COALESCE(?, status),
+        remarks = COALESCE(?, remarks),
+        updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `).run(
+      bank_name,
+      loan_account_no,
+      demand_type,
+      demand_amount !== undefined ? parseFloat(demand_amount) : null,
+      settlement_offer_amount !== undefined ? parseFloat(settlement_offer_amount) : null,
+      notice_date,
+      reply_due_date,
+      status,
+      remarks,
+      req.params.id
+    );
+
+    res.json({ message: 'Demand notice updated successfully' });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to update demand notice' });
+  }
+});
+
+// DELETE /api/advocate-portal/demand-notices/:id
+router.delete('/demand-notices/:id', authenticateToken, requireAdvocateOrAdmin, (req, res) => {
+  try {
+    db.prepare(`DELETE FROM demand_notices WHERE id = ?`).run(req.params.id);
+    res.json({ message: 'Demand notice deleted' });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to delete demand notice' });
   }
 });
 

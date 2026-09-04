@@ -34,3 +34,6 @@ mingit.zip
 gh.zip
 bin/
 git/
+
+.vercel
+.env*

@@ -21,6 +21,8 @@ import { useAuth } from '../../context/AuthContext';
 import { AdvocateDashboardView } from './AdvocateDashboardView';
 import { AdvocateCasesView } from './AdvocateCasesView';
 import { AdvocateTasksView } from './AdvocateTasksView';
+import { AdvocateLegalNoticesView } from './AdvocateLegalNoticesView';
+import { AdvocateDemandNoticesView } from './AdvocateDemandNoticesView';
 
 interface AdvocateWorkspaceProps {
   onSwitchToAdmin?: () => void;
@@ -28,7 +30,7 @@ interface AdvocateWorkspaceProps {
 
 export const AdvocateWorkspace: React.FC<AdvocateWorkspaceProps> = ({ onSwitchToAdmin }) => {
   const { user, logout } = useAuth();
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'cases' | 'tasks'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'cases' | 'legal_notices' | 'demand_notices' | 'tasks'>('dashboard');
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [casesOpen, setCasesOpen] = useState(true);
   const [tasksOpen, setTasksOpen] = useState(true);
@@ -150,6 +152,32 @@ export const AdvocateWorkspace: React.FC<AdvocateWorkspaceProps> = ({ onSwitchTo
             )}
           </div>
 
+          {/* Legal Notices & Anti-Harassment Defense */}
+          <button
+            onClick={() => setActiveTab('legal_notices')}
+            className={`w-full flex items-center space-x-3 px-3.5 py-2.5 rounded-xl transition-all ${
+              activeTab === 'legal_notices'
+                ? 'bg-[#111827] text-white shadow-md'
+                : 'text-slate-700 hover:bg-[#b8ccb6] hover:text-slate-900'
+            }`}
+          >
+            <FileSignature className="h-4 w-4 shrink-0" />
+            {sidebarOpen && <span className="font-bold">Legal Notices</span>}
+          </button>
+
+          {/* Demand Notices & OTS Counter Offers */}
+          <button
+            onClick={() => setActiveTab('demand_notices')}
+            className={`w-full flex items-center space-x-3 px-3.5 py-2.5 rounded-xl transition-all ${
+              activeTab === 'demand_notices'
+                ? 'bg-[#111827] text-white shadow-md'
+                : 'text-slate-700 hover:bg-[#b8ccb6] hover:text-slate-900'
+            }`}
+          >
+            <ShieldAlert className="h-4 w-4 shrink-0" />
+            {sidebarOpen && <span className="font-bold">Demand Notices</span>}
+          </button>
+
           {/* Legal Actions & Notice Responses */}
           <div>
             <button
@@ -164,7 +192,7 @@ export const AdvocateWorkspace: React.FC<AdvocateWorkspaceProps> = ({ onSwitchTo
             >
               <div className="flex items-center space-x-3">
                 <CheckCircle2 className="h-4 w-4 shrink-0" />
-                {sidebarOpen && <span>Notices & Tasks</span>}
+                {sidebarOpen && <span>Tasks & Deadlines</span>}
               </div>
               {sidebarOpen && (
                 <ChevronDown
@@ -295,6 +323,14 @@ export const AdvocateWorkspace: React.FC<AdvocateWorkspaceProps> = ({ onSwitchTo
 
           {activeTab === 'cases' && (
             <AdvocateCasesView initialCaseStatusFilter={caseFilter} />
+          )}
+
+          {activeTab === 'legal_notices' && (
+            <AdvocateLegalNoticesView />
+          )}
+
+          {activeTab === 'demand_notices' && (
+            <AdvocateDemandNoticesView onDraftReplyNotice={() => setActiveTab('legal_notices')} />
           )}
 
           {activeTab === 'tasks' && (

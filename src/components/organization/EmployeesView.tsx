@@ -155,6 +155,11 @@ export const EmployeesView: React.FC = () => {
     }
   };
 
+  const handleOpenView = (emp: User) => {
+    setSelectedEmployee(emp);
+    setIsViewOpen(true);
+  };
+
   const handleOpenTransfer = (emp: User) => {
     setSelectedEmployee(emp);
     setTransferData({

@@ -36,6 +36,7 @@ import { ManagerAdvocatesView } from './ManagerAdvocatesView';
 import { ManagerActivityView } from './ManagerActivityView';
 import { NotificationBell } from '../common/NotificationBell';
 import { LeadImportDistributionView } from '../leads/LeadImportDistributionView';
+import { ClientOnboardingMainView } from '../crm/ClientOnboardingMainView';
 
 interface ManagerWorkspaceProps {
   onSwitchToAdmin?: () => void;
@@ -123,8 +124,8 @@ export const ManagerWorkspace: React.FC<ManagerWorkspaceProps> = ({ onSwitchToAd
           <button
             onClick={() => setActiveTab('dashboard')}
             className={`w-full flex items-center space-x-3 px-3.5 py-2.5 rounded-xl transition-all ${activeTab === 'dashboard'
-                ? 'bg-[#111827] text-white shadow-md'
-                : 'text-slate-700 hover:bg-[#b8ccb6] hover:text-slate-900'
+              ? 'bg-[#111827] text-white shadow-md'
+              : 'text-slate-700 hover:bg-[#b8ccb6] hover:text-slate-900'
               }`}
           >
             <Gauge className="h-4 w-4 shrink-0" />
@@ -139,8 +140,8 @@ export const ManagerWorkspace: React.FC<ManagerWorkspaceProps> = ({ onSwitchToAd
                 setActiveTab('team');
               }}
               className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl transition-all ${activeTab === 'team'
-                  ? 'bg-[#111827] text-white shadow-md'
-                  : 'text-slate-700 hover:bg-[#b8ccb6] hover:text-slate-900'
+                ? 'bg-[#111827] text-white shadow-md'
+                : 'text-slate-700 hover:bg-[#b8ccb6] hover:text-slate-900'
                 }`}
             >
               <div className="flex items-center space-x-3">
@@ -158,8 +159,8 @@ export const ManagerWorkspace: React.FC<ManagerWorkspaceProps> = ({ onSwitchToAd
                 <button
                   onClick={() => setActiveTab('team')}
                   className={`w-full text-left py-1.5 px-3 rounded-lg text-[11px] font-medium transition-all ${activeTab === 'team'
-                      ? 'bg-[#e2ede0] text-[#166534] font-bold'
-                      : 'text-slate-600 hover:text-slate-900'
+                    ? 'bg-[#e2ede0] text-[#166534] font-bold'
+                    : 'text-slate-600 hover:text-slate-900'
                     }`}
                 >
                   Employees & Quotas
@@ -178,9 +179,9 @@ export const ManagerWorkspace: React.FC<ManagerWorkspaceProps> = ({ onSwitchToAd
                     setActiveTab('clients');
                   }
                 }}
-                className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl transition-all ${activeTab === 'leads' || activeTab === 'clients' || activeTab === 'agreements' || activeTab === 'follow-ups'
-                    ? 'bg-[#111827] text-white shadow-md'
-                    : 'text-slate-700 hover:bg-[#b8ccb6] hover:text-slate-900'
+                className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl transition-all ${activeTab === 'leads' || activeTab === 'clients' || activeTab === 'agreements' || activeTab === 'follow-ups' || activeTab === 'onboarding-form'
+                  ? 'bg-[#111827] text-white shadow-md'
+                  : 'text-slate-700 hover:bg-[#b8ccb6] hover:text-slate-900'
                   }`}
               >
                 <div className="flex items-center space-x-3">
@@ -198,8 +199,8 @@ export const ManagerWorkspace: React.FC<ManagerWorkspaceProps> = ({ onSwitchToAd
                   <button
                     onClick={() => setActiveTab('clients')}
                     className={`w-full text-left py-1.5 px-3 rounded-lg text-[11px] font-medium transition-all ${activeTab === 'clients'
-                        ? 'bg-[#e2ede0] text-[#166534] font-bold'
-                        : 'text-slate-600 hover:text-slate-900'
+                      ? 'bg-[#e2ede0] text-[#166534] font-bold'
+                      : 'text-slate-600 hover:text-slate-900'
                       }`}
                   >
                     Clients & Cases
@@ -207,8 +208,8 @@ export const ManagerWorkspace: React.FC<ManagerWorkspaceProps> = ({ onSwitchToAd
                   <button
                     onClick={() => setActiveTab('leads')}
                     className={`w-full text-left py-1.5 px-3 rounded-lg text-[11px] font-medium transition-all ${activeTab === 'leads'
-                        ? 'bg-[#e2ede0] text-[#166534] font-bold'
-                        : 'text-slate-600 hover:text-slate-900'
+                      ? 'bg-[#e2ede0] text-[#166534] font-bold'
+                      : 'text-slate-600 hover:text-slate-900'
                       }`}
                   >
                     Leads Pipeline
@@ -216,8 +217,8 @@ export const ManagerWorkspace: React.FC<ManagerWorkspaceProps> = ({ onSwitchToAd
                   <button
                     onClick={() => setActiveTab('lead-import-distribution')}
                     className={`w-full text-left py-1.5 px-3 rounded-lg text-[11px] font-medium transition-all flex items-center justify-between ${activeTab === 'lead-import-distribution'
-                        ? 'bg-[#e2ede0] text-[#166534] font-bold'
-                        : 'text-slate-600 hover:text-slate-900'
+                      ? 'bg-[#e2ede0] text-[#166534] font-bold'
+                      : 'text-slate-600 hover:text-slate-900'
                       }`}
                   >
                     <span>Import & Distribute</span>
@@ -226,17 +227,26 @@ export const ManagerWorkspace: React.FC<ManagerWorkspaceProps> = ({ onSwitchToAd
                   <button
                     onClick={() => setActiveTab('agreements')}
                     className={`w-full text-left py-1.5 px-3 rounded-lg text-[11px] font-medium transition-all ${activeTab === 'agreements'
-                        ? 'bg-[#e2ede0] text-[#166534] font-bold'
-                        : 'text-slate-600 hover:text-slate-900'
+                      ? 'bg-[#e2ede0] text-[#166534] font-bold'
+                      : 'text-slate-600 hover:text-slate-900'
                       }`}
                   >
                     Agreements
                   </button>
                   <button
+                    onClick={() => setActiveTab('onboarding-form')}
+                    className={`w-full text-left py-1.5 px-3 rounded-lg text-[11px] font-medium transition-all ${activeTab === 'onboarding-form'
+                      ? 'bg-[#e2ede0] text-[#166534] font-bold'
+                      : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                  >
+                    Onboarding Forms
+                  </button>
+                  <button
                     onClick={() => setActiveTab('follow-ups')}
                     className={`w-full text-left py-1.5 px-3 rounded-lg text-[11px] font-medium transition-all ${activeTab === 'follow-ups'
-                        ? 'bg-[#e2ede0] text-[#166534] font-bold'
-                        : 'text-slate-600 hover:text-slate-900'
+                      ? 'bg-[#e2ede0] text-[#166534] font-bold'
+                      : 'text-slate-600 hover:text-slate-900'
                       }`}
                   >
                     Follow-ups Monitor
@@ -255,8 +265,8 @@ export const ManagerWorkspace: React.FC<ManagerWorkspaceProps> = ({ onSwitchToAd
                   setActiveTab('advocates');
                 }}
                 className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl transition-all ${activeTab === 'advocates'
-                    ? 'bg-[#111827] text-white shadow-md'
-                    : 'text-slate-700 hover:bg-[#b8ccb6] hover:text-slate-900'
+                  ? 'bg-[#111827] text-white shadow-md'
+                  : 'text-slate-700 hover:bg-[#b8ccb6] hover:text-slate-900'
                   }`}
               >
                 <div className="flex items-center space-x-3">
@@ -274,8 +284,8 @@ export const ManagerWorkspace: React.FC<ManagerWorkspaceProps> = ({ onSwitchToAd
                   <button
                     onClick={() => setActiveTab('advocates')}
                     className={`w-full text-left py-1.5 px-3 rounded-lg text-[11px] font-medium transition-all ${activeTab === 'advocates'
-                        ? 'bg-[#e2ede0] text-[#166534] font-bold'
-                        : 'text-slate-600 hover:text-slate-900'
+                      ? 'bg-[#e2ede0] text-[#166534] font-bold'
+                      : 'text-slate-600 hover:text-slate-900'
                       }`}
                   >
                     Empanelled Advocates
@@ -296,8 +306,8 @@ export const ManagerWorkspace: React.FC<ManagerWorkspaceProps> = ({ onSwitchToAd
                   }
                 }}
                 className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl transition-all ${activeTab === 'payments' || activeTab === 'verification'
-                    ? 'bg-[#111827] text-white shadow-md'
-                    : 'text-slate-700 hover:bg-[#b8ccb6] hover:text-slate-900'
+                  ? 'bg-[#111827] text-white shadow-md'
+                  : 'text-slate-700 hover:bg-[#b8ccb6] hover:text-slate-900'
                   }`}
               >
                 <div className="flex items-center space-x-3">
@@ -315,8 +325,8 @@ export const ManagerWorkspace: React.FC<ManagerWorkspaceProps> = ({ onSwitchToAd
                   <button
                     onClick={() => setActiveTab('payments')}
                     className={`w-full text-left py-1.5 px-3 rounded-lg text-[11px] font-medium transition-all ${activeTab === 'payments'
-                        ? 'bg-[#e2ede0] text-[#166534] font-bold'
-                        : 'text-slate-600 hover:text-slate-900'
+                      ? 'bg-[#e2ede0] text-[#166534] font-bold'
+                      : 'text-slate-600 hover:text-slate-900'
                       }`}
                   >
                     Payment Management
@@ -324,8 +334,8 @@ export const ManagerWorkspace: React.FC<ManagerWorkspaceProps> = ({ onSwitchToAd
                   <button
                     onClick={() => setActiveTab('verification')}
                     className={`w-full text-left py-1.5 px-3 rounded-lg text-[11px] font-medium transition-all ${activeTab === 'verification'
-                        ? 'bg-[#e2ede0] text-[#166534] font-bold'
-                        : 'text-slate-600 hover:text-slate-900'
+                      ? 'bg-[#e2ede0] text-[#166534] font-bold'
+                      : 'text-slate-600 hover:text-slate-900'
                       }`}
                   >
                     Payment Verification
@@ -339,8 +349,8 @@ export const ManagerWorkspace: React.FC<ManagerWorkspaceProps> = ({ onSwitchToAd
           <button
             onClick={() => setActiveTab('tasks')}
             className={`w-full flex items-center space-x-3 px-3.5 py-2.5 rounded-xl transition-all ${activeTab === 'tasks'
-                ? 'bg-[#111827] text-white shadow-md'
-                : 'text-slate-700 hover:bg-[#b8ccb6] hover:text-slate-900'
+              ? 'bg-[#111827] text-white shadow-md'
+              : 'text-slate-700 hover:bg-[#b8ccb6] hover:text-slate-900'
               }`}
           >
             <CheckSquare className="h-4 w-4 shrink-0" />
@@ -350,8 +360,8 @@ export const ManagerWorkspace: React.FC<ManagerWorkspaceProps> = ({ onSwitchToAd
           <button
             onClick={() => setActiveTab('activity')}
             className={`w-full flex items-center space-x-3 px-3.5 py-2.5 rounded-xl transition-all ${activeTab === 'activity'
-                ? 'bg-[#111827] text-white shadow-md'
-                : 'text-slate-700 hover:bg-[#b8ccb6] hover:text-slate-900'
+              ? 'bg-[#111827] text-white shadow-md'
+              : 'text-slate-700 hover:bg-[#b8ccb6] hover:text-slate-900'
               }`}
           >
             <Activity className="h-4 w-4 shrink-0" />
@@ -486,6 +496,7 @@ export const ManagerWorkspace: React.FC<ManagerWorkspaceProps> = ({ onSwitchToAd
           )}
           {activeTab === 'clients' && <ManagerClientsView managerType={managerType} />}
           {activeTab === 'agreements' && <ManagerAgreementsView />}
+          {activeTab === 'onboarding-form' && <ClientOnboardingMainView userRole="manager" />}
           {activeTab === 'payments' && <ManagerPaymentManagementView />}
           {activeTab === 'verification' && <ManagerPaymentsVerificationView />}
           {activeTab === 'advocates' && <ManagerAdvocatesView />}

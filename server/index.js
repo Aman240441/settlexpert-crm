@@ -112,18 +112,9 @@ app.listen(PORT, '0.0.0.0', () => {
     }
   }
 
-  // Schedule daily payment due check at midnight (every 24 hours)
-  const TWENTY_FOUR_HOURS = 24 * 60 * 60 * 1000;
-  setInterval(() => {
-    if (typeof db.runPaymentDueCheck === 'function') {
-      try {
-        db.runPaymentDueCheck();
-        console.log(`[${new Date().toISOString()}] Daily Payment Due Check: completed.`);
-      } catch (e) {
-        console.warn('Daily Payment Due Check error:', e.message);
-      }
-    }
-  }, TWENTY_FOUR_HOURS);
+  // Initialize Live Supabase Cloud Sync Worker
+  const { startLiveSyncWorker } = require('./db/supabaseClient');
+  startLiveSyncWorker(db, 60000); // syncs every 60s
 });
 
 module.exports = app;

@@ -16,6 +16,7 @@ import { PaymentsView } from './components/finance/PaymentsView';
 import { LeadsView } from './components/crm/LeadsView';
 import { ClientsView } from './components/crm/ClientsView';
 import { AgreementsView } from './components/crm/AgreementsView';
+import { ClientOnboardingMainView } from './components/crm/ClientOnboardingMainView';
 import { OperationsView } from './components/operations/OperationsView';
 import { ReportsView } from './components/reports/ReportsView';
 import { AuditLogsView } from './components/audit/AuditLogsView';
@@ -127,6 +128,9 @@ export const App: React.FC = () => {
         return <ClientsView />;
       case 'agreements':
         return <AgreementsView />;
+      case 'onboarding-form':
+      case 'onboarding-forms':
+        return <ClientOnboardingMainView userRole="admin" />;
       case 'tasks':
         return <OperationsView initialTab="tasks" />;
       case 'follow-ups':
@@ -158,9 +162,8 @@ export const App: React.FC = () => {
 
       {/* Main Content Area */}
       <div
-        className={`flex-1 flex flex-col transition-all duration-300 ${
-          sidebarCollapsed ? 'pl-20' : 'pl-72'
-        }`}
+        className={`flex-1 flex flex-col transition-all duration-300 ${sidebarCollapsed ? 'pl-20' : 'pl-72'
+          }`}
       >
         <Header
           currentSection={currentSection}

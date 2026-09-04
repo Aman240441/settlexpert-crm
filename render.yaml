@@ -1,10 +1,11 @@
 services:
   - type: web
-    name: settlexpert-backend
+    name: settlexpertcrm-api
     env: node
     plan: free
     buildCommand: npm install
     startCommand: node server/index.js
+    healthCheckPath: /api/health
     envVars:
       - key: NODE_ENV
         value: production
@@ -13,10 +14,10 @@ services:
       - key: JWT_SECRET
         generateValue: true
       - key: SUPABASE_URL
-        sync: false
+        value: https://izotfjxrpqvgoaoerlbz.supabase.co
       - key: SUPABASE_SECRET_KEY
         sync: false
       - key: SUPABASE_ANON_KEY
         sync: false
       - key: ALLOWED_ORIGINS
-        sync: false
+        value: https://settle-frontend.vercel.app,https://settle-frontend-*.vercel.app

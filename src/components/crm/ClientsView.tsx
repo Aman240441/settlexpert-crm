@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { Users, Plus, Search, Scale, UserCheck, WalletCards } from 'lucide-react';
+import { Users, Plus, Search, Scale, UserCheck, WalletCards, Eye, ArrowLeft, FileSignature, Edit2, Building2 } from 'lucide-react';
 import { api } from '../../services/api';
 import { Client, FeePlan, User, Advocate } from '../../types';
 import { Modal } from '../common/Modal';
 import { Badge } from '../common/Badge';
+import { ClientDetailsUnifiedView } from './ClientDetailsUnifiedView';
 
 export const ClientsView: React.FC = () => {
   const [clients, setClients] = useState<Client[]>([]);
@@ -12,6 +13,11 @@ export const ClientsView: React.FC = () => {
   const [advocates, setAdvocates] = useState<Advocate[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+
+  // Mode: 'list' | 'view_details'
+  const [viewMode, setViewMode] = useState<'list' | 'view_details'>('list');
+  const [selectedClientDetails, setSelectedClientDetails] = useState<any>(null);
+  const [selectedClientMonthlyPayments, setSelectedClientMonthlyPayments] = useState<any>(null);
 
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [formData, setFormData] = useState({
@@ -75,6 +81,25 @@ export const ClientsView: React.FC = () => {
     }).format(amt || 0);
   };
 
+  const handleOpenClientDetails = async (client: any) => {
+    try {
+      setLoading(true);
+      const [detailed, monthlyRes] = await Promise.all([
+        api.getCRMClient(client.id),
+        api.getCRMClientMonthlyPayments(client.id).catch(() => null)
+      ]);
+      setSelectedClientDetails(detailed);
+      setSelectedClientMonthlyPayments(monthlyRes);
+      setViewMode('view_details');
+    } catch (err) {
+      setSelectedClientDetails({ client });
+      setSelectedClientMonthlyPayments(null);
+      setViewMode('view_details');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const filteredClients = clients.filter(
     (c) =>
       c.name.toLowerCase().includes(search.toLowerCase()) ||
@@ -82,15 +107,34 @@ export const ClientsView: React.FC = () => {
       (c.client_number && c.client_number.toLowerCase().includes(search.toLowerCase()))
   );
 
+  // Render Full Client Details & Onboarding Form View
+  if (viewMode === 'view_details' && selectedClientDetails) {
+    const clientData = selectedClientDetails.client || selectedClientDetails;
+    return (
+      <ClientDetailsUnifiedView
+        client={clientData}
+        lenders={selectedClientDetails.lenders || []}
+        agreements={selectedClientDetails.agreements || []}
+        payments={selectedClientDetails.payments || []}
+        monthlyPaymentData={selectedClientMonthlyPayments}
+        userRole="admin"
+        initialTab="onboarding-form"
+        onBack={() => {
+          setViewMode('list');
+          setSelectedClientDetails(null);
+        }}
+      />
+    );
+  }
+
   return (
     <div className="space-y-6 font-sans text-slate-800 pb-16 animate-fade-in">
       {feedbackMsg && (
         <div
-          className={`p-4 rounded-xl flex items-center justify-between text-xs font-semibold ${
-            feedbackMsg.type === 'success'
-              ? 'bg-emerald-50 border border-emerald-300 text-emerald-800'
-              : 'bg-rose-50 border border-rose-300 text-rose-800'
-          }`}
+          className={`p-4 rounded-xl flex items-center justify-between text-xs font-semibold ${feedbackMsg.type === 'success'
+            ? 'bg-emerald-50 border border-emerald-300 text-emerald-800'
+            : 'bg-rose-50 border border-rose-300 text-rose-800'
+            }`}
         >
           <span>{feedbackMsg.text}</span>
           <button onClick={() => setFeedbackMsg(null)} className="text-slate-500 hover:text-slate-800 font-bold ml-4">
@@ -144,12 +188,13 @@ export const ClientsView: React.FC = () => {
                 <th className="py-3.5 px-4">Assigned Advocate</th>
                 <th className="py-3.5 px-4">Manager</th>
                 <th className="py-3.5 px-4">Status</th>
+                <th className="py-3.5 px-4 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-slate-700">
               {loading ? (
                 <tr>
-                  <td colSpan={7} className="py-8 text-center text-slate-400 font-medium">
+                  <td colSpan={8} className="py-8 text-center text-slate-400 font-medium">
                     Loading clients...
                   </td>
                 </tr>
@@ -157,14 +202,28 @@ export const ClientsView: React.FC = () => {
                 filteredClients.map((c) => (
                   <tr key={c.id} className="hover:bg-slate-50/80 transition-colors">
                     <td className="py-3.5 px-4">
-                      <span className="font-mono font-bold text-slate-900 block">{c.client_number}</span>
-                      <span className="text-[10px] text-slate-400">
-                        {new Date(c.created_at).toLocaleDateString()}
-                      </span>
+                      <button
+                        onClick={() => handleOpenClientDetails(c)}
+                        className="text-left group cursor-pointer"
+                        title="View Full Client Details & Onboarding Form"
+                      >
+                        <span className="font-mono font-bold text-blue-700 block group-hover:underline">
+                          {c.client_number}
+                        </span>
+                        <span className="text-[10px] text-slate-400">
+                          {new Date(c.created_at).toLocaleDateString()}
+                        </span>
+                      </button>
                     </td>
                     <td className="py-3.5 px-4">
-                      <p className="font-bold text-slate-900">{c.name}</p>
-                      <p className="text-[11px] text-slate-500">{c.phone}</p>
+                      <button
+                        onClick={() => handleOpenClientDetails(c)}
+                        className="text-left font-bold text-slate-900 hover:text-blue-700 transition-colors cursor-pointer block"
+                        title="View Full Client Details & Onboarding Form"
+                      >
+                        {c.name}
+                      </button>
+                      <p className="text-[11px] text-slate-500 font-mono">{c.phone}</p>
                     </td>
                     <td className="py-3.5 px-4">
                       <span className="font-bold text-slate-900 block">{formatCurrency(c.total_debt)}</span>
@@ -190,11 +249,32 @@ export const ClientsView: React.FC = () => {
                     <td className="py-3.5 px-4">
                       <Badge status={c.status} />
                     </td>
+                    <td className="py-3.5 px-4 text-right space-x-1.5 whitespace-nowrap">
+                      <button
+                        onClick={() => handleOpenClientDetails(c)}
+                        title="View Full Client Details"
+                        className="h-7 w-7 rounded border border-cyan-400 bg-white hover:bg-cyan-50 text-cyan-500 transition-colors inline-flex items-center justify-center shadow-xs cursor-pointer"
+                      >
+                        <Eye className="h-3.5 w-3.5" />
+                      </button>
+                      <button
+                        title="Edit Client"
+                        className="h-7 w-7 rounded border border-amber-400 bg-white hover:bg-amber-50 text-amber-500 transition-colors inline-flex items-center justify-center shadow-xs cursor-pointer"
+                      >
+                        <Edit2 className="h-3.5 w-3.5" />
+                      </button>
+                      <button
+                        title="Add Lender"
+                        className="h-7 w-7 rounded border border-indigo-400 bg-white hover:bg-indigo-50 text-indigo-500 transition-colors inline-flex items-center justify-center shadow-xs cursor-pointer"
+                      >
+                        <Building2 className="h-3.5 w-3.5" />
+                      </button>
+                    </td>
                   </tr>
                 ))
               ) : (
                 <tr>
-                  <td colSpan={7} className="py-8 text-center text-slate-400 font-medium">
+                  <td colSpan={8} className="py-8 text-center text-slate-400 font-medium">
                     No clients found matching criteria.
                   </td>
                 </tr>

@@ -29,11 +29,13 @@ import { CalendarDateFilter, getTodayStr } from '../common/CalendarDateFilter';
 interface EmployeeLeadsViewProps {
   initialStatusFilter?: string;
   onNavigateToAgreement?: (lead: any) => void;
+  onNavigateToClients?: () => void;
 }
 
 export const EmployeeLeadsView: React.FC<EmployeeLeadsViewProps> = ({
   initialStatusFilter,
-  onNavigateToAgreement
+  onNavigateToAgreement,
+  onNavigateToClients
 }) => {
   const [leads, setLeads] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -247,12 +249,45 @@ export const EmployeeLeadsView: React.FC<EmployeeLeadsViewProps> = ({
         status: editFormData.status
       };
 
-      await api.updateCRMLead(currentLead.id, payload);
-      setFeedbackMsg({ type: 'success', text: `Lead ${currentLead.lead_number} updated successfully!` });
+      const res = await api.updateCRMLead(currentLead.id, payload);
+      if (editFormData.status === 'converted') {
+        setFeedbackMsg({
+          type: 'success',
+          text: `🎉 Lead ${currentLead.lead_number} updated and converted to Client${res.client_number ? ` (${res.client_number})` : ''}! Transferred to Clients list.`
+        });
+      } else {
+        setFeedbackMsg({ type: 'success', text: `Lead ${currentLead.lead_number} updated successfully!` });
+      }
       setViewMode('list');
       fetchLeads();
     } catch (err: any) {
       setFeedbackMsg({ type: 'error', text: err.message || 'Failed to update lead' });
+    }
+  };
+
+  // Dedicated Convert Lead to Client Action
+  const handleConvertLead = async (lead: any) => {
+    if (lead.status === 'converted') {
+      if (onNavigateToClients) {
+        onNavigateToClients();
+      } else {
+        setFeedbackMsg({ type: 'success', text: `Lead ${lead.lead_number} is already converted to a Client. View it in the Clients list.` });
+      }
+      return;
+    }
+
+    try {
+      setLoading(true);
+      const res = await api.convertCRMLead(lead.id);
+      setFeedbackMsg({
+        type: 'success',
+        text: `🎉 Lead ${lead.lead_number} converted successfully to Client ${res.client_number || ''}! Transferred to Clients list.`
+      });
+      fetchLeads();
+    } catch (err: any) {
+      setFeedbackMsg({ type: 'error', text: err.message || 'Failed to convert lead' });
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -279,8 +314,15 @@ export const EmployeeLeadsView: React.FC<EmployeeLeadsViewProps> = ({
   const handleSaveFollowUp = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      await api.createCRMFollowUp(selectedLeadForFollowUp.id, followUpFormData);
-      setFeedbackMsg({ type: 'success', text: `Follow-up recorded successfully for ${selectedLeadForFollowUp.lead_number}!` });
+      const res = await api.createCRMFollowUp(selectedLeadForFollowUp.id, followUpFormData);
+      if (followUpFormData.final_status === 'converted') {
+        setFeedbackMsg({
+          type: 'success',
+          text: `🎉 Follow-up saved & Lead ${selectedLeadForFollowUp.lead_number} converted to Client${res.client_number ? ` (${res.client_number})` : ''}! Transferred to Clients list.`
+        });
+      } else {
+        setFeedbackMsg({ type: 'success', text: `Follow-up recorded successfully for ${selectedLeadForFollowUp.lead_number}!` });
+      }
 
       // Refresh follow-up history
       const hist = await api.getCRMFollowUps(selectedLeadForFollowUp.id);
@@ -668,11 +710,10 @@ export const EmployeeLeadsView: React.FC<EmployeeLeadsViewProps> = ({
         {/* Toast Alert */}
         {feedbackMsg && (
           <div
-            className={`p-3 rounded-lg flex items-center justify-between text-xs font-semibold ${
-              feedbackMsg.type === 'success'
+            className={`p-3 rounded-lg flex items-center justify-between text-xs font-semibold ${feedbackMsg.type === 'success'
                 ? 'bg-emerald-50 border border-emerald-300 text-emerald-800'
                 : 'bg-rose-50 border border-rose-300 text-rose-800'
-            }`}
+              }`}
           >
             <span>{feedbackMsg.text}</span>
             <button onClick={() => setFeedbackMsg(null)} className="text-slate-500 hover:text-slate-800 font-bold ml-4">
@@ -903,10 +944,9 @@ export const EmployeeLeadsView: React.FC<EmployeeLeadsViewProps> = ({
                       <td className="py-2.5 px-3 font-semibold text-slate-900">{h.user_name || 'Dhruv Consultant'}</td>
                       <td className="py-2.5 px-3 text-slate-700">{h.call_status}</td>
                       <td className="py-2.5 px-3">
-                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                          h.interested_level === 'High' ? 'bg-emerald-100 text-emerald-800' :
-                          h.interested_level === 'Medium' ? 'bg-amber-100 text-amber-800' : 'bg-gray-100 text-slate-700'
-                        }`}>
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${h.interested_level === 'High' ? 'bg-emerald-100 text-emerald-800' :
+                            h.interested_level === 'Medium' ? 'bg-amber-100 text-amber-800' : 'bg-gray-100 text-slate-700'
+                          }`}>
                           {h.interested_level}
                         </span>
                       </td>
@@ -947,11 +987,10 @@ export const EmployeeLeadsView: React.FC<EmployeeLeadsViewProps> = ({
       {/* Toast Alert */}
       {feedbackMsg && (
         <div
-          className={`p-3 rounded-lg flex items-center justify-between text-xs font-semibold ${
-            feedbackMsg.type === 'success'
+          className={`p-3 rounded-lg flex items-center justify-between text-xs font-semibold ${feedbackMsg.type === 'success'
               ? 'bg-emerald-50 border border-emerald-300 text-emerald-800'
               : 'bg-rose-50 border border-rose-300 text-rose-800'
-          }`}
+            }`}
         >
           <span>{feedbackMsg.text}</span>
           <button onClick={() => setFeedbackMsg(null)} className="text-slate-500 hover:text-slate-800 font-bold ml-4">
@@ -1013,11 +1052,10 @@ export const EmployeeLeadsView: React.FC<EmployeeLeadsViewProps> = ({
             setStatusFilter('all');
             setPage(1);
           }}
-          className={`px-3 py-1 rounded text-xs font-semibold transition-all ${
-            statusFilter === 'all'
+          className={`px-3 py-1 rounded text-xs font-semibold transition-all ${statusFilter === 'all'
               ? 'bg-[#111827] text-white shadow-xs'
               : 'bg-white hover:bg-gray-50 text-slate-700 border border-gray-200'
-          }`}
+            }`}
         >
           All ({statusCounts.all})
         </button>
@@ -1026,11 +1064,10 @@ export const EmployeeLeadsView: React.FC<EmployeeLeadsViewProps> = ({
             setStatusFilter('new');
             setPage(1);
           }}
-          className={`px-3 py-1 rounded text-xs font-semibold transition-all ${
-            statusFilter === 'new'
+          className={`px-3 py-1 rounded text-xs font-semibold transition-all ${statusFilter === 'new'
               ? 'bg-[#111827] text-white shadow-xs'
               : 'bg-white hover:bg-gray-50 text-slate-700 border border-gray-200'
-          }`}
+            }`}
         >
           New ({statusCounts.new})
         </button>
@@ -1039,11 +1076,10 @@ export const EmployeeLeadsView: React.FC<EmployeeLeadsViewProps> = ({
             setStatusFilter('contacted');
             setPage(1);
           }}
-          className={`px-3 py-1 rounded text-xs font-semibold transition-all ${
-            statusFilter === 'contacted'
+          className={`px-3 py-1 rounded text-xs font-semibold transition-all ${statusFilter === 'contacted'
               ? 'bg-[#111827] text-white shadow-xs'
               : 'bg-white hover:bg-gray-50 text-slate-700 border border-gray-200'
-          }`}
+            }`}
         >
           Contacted ({statusCounts.contacted})
         </button>
@@ -1052,11 +1088,10 @@ export const EmployeeLeadsView: React.FC<EmployeeLeadsViewProps> = ({
             setStatusFilter('interested');
             setPage(1);
           }}
-          className={`px-3 py-1 rounded text-xs font-semibold transition-all ${
-            statusFilter === 'interested'
+          className={`px-3 py-1 rounded text-xs font-semibold transition-all ${statusFilter === 'interested'
               ? 'bg-[#111827] text-white shadow-xs'
               : 'bg-white hover:bg-gray-50 text-slate-700 border border-gray-200'
-          }`}
+            }`}
         >
           Interested ({statusCounts.interested})
         </button>
@@ -1065,11 +1100,10 @@ export const EmployeeLeadsView: React.FC<EmployeeLeadsViewProps> = ({
             setStatusFilter('follow_up');
             setPage(1);
           }}
-          className={`px-3 py-1 rounded text-xs font-semibold transition-all ${
-            statusFilter === 'follow_up'
+          className={`px-3 py-1 rounded text-xs font-semibold transition-all ${statusFilter === 'follow_up'
               ? 'bg-[#111827] text-white shadow-xs'
               : 'bg-white hover:bg-gray-50 text-slate-700 border border-gray-200'
-          }`}
+            }`}
         >
           Follow up ({statusCounts.follow_up})
         </button>
@@ -1078,11 +1112,10 @@ export const EmployeeLeadsView: React.FC<EmployeeLeadsViewProps> = ({
             setStatusFilter('converted');
             setPage(1);
           }}
-          className={`px-3 py-1 rounded text-xs font-semibold transition-all ${
-            statusFilter === 'converted'
+          className={`px-3 py-1 rounded text-xs font-semibold transition-all ${statusFilter === 'converted'
               ? 'bg-[#111827] text-white shadow-xs'
               : 'bg-white hover:bg-gray-50 text-slate-700 border border-gray-200'
-          }`}
+            }`}
         >
           Converted ({statusCounts.converted})
         </button>
@@ -1091,11 +1124,10 @@ export const EmployeeLeadsView: React.FC<EmployeeLeadsViewProps> = ({
             setStatusFilter('not_interested');
             setPage(1);
           }}
-          className={`px-3 py-1 rounded text-xs font-semibold transition-all ${
-            statusFilter === 'not_interested'
+          className={`px-3 py-1 rounded text-xs font-semibold transition-all ${statusFilter === 'not_interested'
               ? 'bg-[#111827] text-white shadow-xs'
               : 'bg-white hover:bg-gray-50 text-slate-700 border border-gray-200'
-          }`}
+            }`}
         >
           Not Interested ({statusCounts.not_interested})
         </button>
@@ -1209,9 +1241,8 @@ export const EmployeeLeadsView: React.FC<EmployeeLeadsViewProps> = ({
                       </span>
                     </td>
                     <td className="py-2.5 px-3 text-center">
-                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                        l.harassment_calls === 'Yes' ? 'bg-rose-50 text-rose-700 border border-rose-200' : 'bg-gray-50 text-slate-700 border border-gray-200'
-                      }`}>
+                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${l.harassment_calls === 'Yes' ? 'bg-rose-50 text-rose-700 border border-rose-200' : 'bg-gray-50 text-slate-700 border border-gray-200'
+                        }`}>
                         {l.harassment_calls || 'No'}
                       </span>
                     </td>
@@ -1219,20 +1250,31 @@ export const EmployeeLeadsView: React.FC<EmployeeLeadsViewProps> = ({
                       {l.created_at ? new Date(l.created_at).toLocaleString() : '2026-08-22 10:00:00'}
                     </td>
                     <td className="py-2.5 px-3 text-center">
-                      <span className={`px-2.5 py-0.5 rounded text-[10px] font-bold capitalize ${
-                        l.status === 'new' ? 'bg-blue-100 text-blue-800' :
-                        l.status === 'contacted' ? 'bg-amber-100 text-amber-800' :
-                        l.status === 'interested' ? 'bg-emerald-100 text-emerald-800' :
-                        l.status === 'follow_up' ? 'bg-purple-100 text-purple-800' :
-                        l.status === 'converted' ? 'bg-teal-100 text-teal-800' : 'bg-gray-100 text-slate-700'
-                      }`}>
+                      <span className={`px-2.5 py-0.5 rounded text-[10px] font-bold capitalize ${l.status === 'new' ? 'bg-blue-100 text-blue-800' :
+                          l.status === 'contacted' ? 'bg-amber-100 text-amber-800' :
+                            l.status === 'interested' ? 'bg-emerald-100 text-emerald-800' :
+                              l.status === 'follow_up' ? 'bg-purple-100 text-purple-800' :
+                                l.status === 'converted' ? 'bg-teal-100 text-teal-800' : 'bg-gray-100 text-slate-700'
+                        }`}>
                         {l.status}
                       </span>
                     </td>
-                    {/* The 3 Exact Actions */}
+                    {/* The Actions */}
                     <td className="py-2 px-3 text-center">
                       <div className="flex items-center justify-center space-x-1.5">
-                        {/* Button 1: Create Agreement */}
+                        {/* Button 1: Convert to Client */}
+                        {l.status !== 'converted' && (
+                          <button
+                            onClick={() => handleConvertLead(l)}
+                            title="Convert Lead to Client"
+                            className="h-7 px-2 rounded border text-[10px] font-bold transition-all flex items-center space-x-1 shadow-xs border-emerald-300 bg-emerald-50 text-emerald-700 hover:bg-emerald-600 hover:text-white"
+                          >
+                            <UserCheck className="h-3.5 w-3.5" />
+                            <span>Convert</span>
+                          </button>
+                        )}
+
+                        {/* Button 2: Create Agreement */}
                         <button
                           onClick={() => handleCreateAgreementAction(l)}
                           title="Create Agreement"
@@ -1241,7 +1283,7 @@ export const EmployeeLeadsView: React.FC<EmployeeLeadsViewProps> = ({
                           <FileText className="h-3.5 w-3.5" />
                         </button>
 
-                        {/* Button 2: Follow Up */}
+                        {/* Button 3: Follow Up */}
                         <button
                           onClick={() => handleOpenFollowUp(l)}
                           title="Follow Up"
@@ -1250,7 +1292,7 @@ export const EmployeeLeadsView: React.FC<EmployeeLeadsViewProps> = ({
                           <Calendar className="h-3.5 w-3.5" />
                         </button>
 
-                        {/* Button 3: Edit Lead */}
+                        {/* Button 4: Edit Lead */}
                         <button
                           onClick={() => handleOpenEditLead(l)}
                           title="Edit Lead"

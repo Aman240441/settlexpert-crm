@@ -154,12 +154,12 @@ async function runTests() {
     assert(newEmpRes.status === 201 && newEmpRes.data.id, 'Employee creation successful');
     const createdEmpId = newEmpRes.data.id;
 
-    // Transfer Employee to another manager
+    // Transfer Employee to manager
     const transferEmpRes = await request(`/api/employees/${createdEmpId}/transfer-manager`, {
       method: 'POST',
       headers: authHeaders,
       body: {
-        new_manager_id: 'mgr-01',
+        new_manager_id: createdMgrId,
         transfer_reason: 'Automated test reallocation'
       }
     });

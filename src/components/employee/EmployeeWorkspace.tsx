@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import {
   Gauge,
+  Layers,
   UserCheck,
   FileSignature,
   Menu,
@@ -12,6 +13,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { EmployeeDashboardView } from './EmployeeDashboardView';
+import { EmployeeLeadsView } from './EmployeeLeadsView';
 import { EmployeeClientsView } from './EmployeeClientsView';
 import { EmployeeAgreementsView } from './EmployeeAgreementsView';
 import { NotificationBell } from '../common/NotificationBell';
@@ -22,11 +24,14 @@ interface EmployeeWorkspaceProps {
 
 export const EmployeeWorkspace: React.FC<EmployeeWorkspaceProps> = ({ onSwitchToAdmin }) => {
   const { user, logout } = useAuth();
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'clients' | 'agreements'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'leads' | 'clients' | 'agreements'>('dashboard');
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [leadsOpen, setLeadsOpen] = useState(true);
   const [clientsOpen, setClientsOpen] = useState(true);
   const [agreementsOpen, setAgreementsOpen] = useState(true);
 
+  const [leadsFilter, setLeadsFilter] = useState<string>('');
+  const [leadsNavKey, setLeadsNavKey] = useState(0);
   const [clientsFilter, setClientsFilter] = useState<string>('');
   const [clientsNavKey, setClientsNavKey] = useState(0);
   const [agreementPreselect, setAgreementPreselect] = useState<any>(null);
@@ -44,7 +49,11 @@ export const EmployeeWorkspace: React.FC<EmployeeWorkspaceProps> = ({ onSwitchTo
   }, []);
 
   const handleNavigateFromDashboard = (tab: 'clients' | 'agreements' | 'leads', filter?: string) => {
-    if (tab === 'clients' || tab === 'leads') {
+    if (tab === 'leads') {
+      setLeadsFilter(filter || '');
+      setLeadsNavKey(k => k + 1);
+      setActiveTab('leads');
+    } else if (tab === 'clients') {
       setClientsFilter(filter || '');
       setClientsNavKey(k => k + 1);
       setActiveTab('clients');
@@ -70,9 +79,8 @@ export const EmployeeWorkspace: React.FC<EmployeeWorkspaceProps> = ({ onSwitchTo
     <div className="min-h-screen bg-[#f3f4f6] text-slate-800 flex font-sans antialiased">
       {/* Sidebar - Matching Screenshot Light Sage Green Background */}
       <aside
-        className={`bg-[#cadbc8] border-r border-[#b5cbb3] transition-all duration-300 flex flex-col shrink-0 z-[500] ${
-          sidebarOpen ? 'w-64' : 'w-20'
-        }`}
+        className={`bg-[#cadbc8] border-r border-[#b5cbb3] transition-all duration-300 flex flex-col shrink-0 z-[500] ${sidebarOpen ? 'w-64' : 'w-20'
+          }`}
       >
         {/* Top Logo */}
         <div className="h-20 flex items-center px-5 border-b border-[#b5cbb3]/60">
@@ -96,15 +104,56 @@ export const EmployeeWorkspace: React.FC<EmployeeWorkspaceProps> = ({ onSwitchTo
           {/* Dashboard */}
           <button
             onClick={() => setActiveTab('dashboard')}
-            className={`w-full flex items-center space-x-3 px-3.5 py-2.5 rounded-xl transition-all ${
-              activeTab === 'dashboard'
-                ? 'bg-[#111827] text-white shadow-md'
-                : 'text-slate-700 hover:bg-[#b8ccb6] hover:text-slate-900'
-            }`}
+            className={`w-full flex items-center space-x-3 px-3.5 py-2.5 rounded-xl transition-all ${activeTab === 'dashboard'
+              ? 'bg-[#111827] text-white shadow-md'
+              : 'text-slate-700 hover:bg-[#b8ccb6] hover:text-slate-900'
+              }`}
           >
             <Gauge className="h-4 w-4 shrink-0" />
             {sidebarOpen && <span className="font-bold">Dashboard</span>}
           </button>
+
+          {/* Leads */}
+          <div>
+            <button
+              onClick={() => {
+                setLeadsOpen(!leadsOpen);
+                setLeadsFilter('all');
+                setActiveTab('leads');
+              }}
+              className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl transition-all ${activeTab === 'leads'
+                ? 'bg-[#111827] text-white shadow-md'
+                : 'text-slate-700 hover:bg-[#b8ccb6] hover:text-slate-900'
+                }`}
+            >
+              <div className="flex items-center space-x-3">
+                <Layers className="h-4 w-4 shrink-0" />
+                {sidebarOpen && <span>Leads</span>}
+              </div>
+              {sidebarOpen && (
+                <ChevronDown
+                  className={`h-3.5 w-3.5 transition-transform ${leadsOpen ? 'rotate-0' : '-rotate-90'}`}
+                />
+              )}
+            </button>
+            {sidebarOpen && leadsOpen && (
+              <div className="pl-9 pr-2 py-1 space-y-1">
+                <button
+                  onClick={() => {
+                    setLeadsFilter('all');
+                    setLeadsNavKey(k => k + 1);
+                    setActiveTab('leads');
+                  }}
+                  className={`w-full text-left py-1.5 px-3 rounded-lg text-[11px] font-medium transition-all ${activeTab === 'leads'
+                    ? 'bg-[#e2ede0] text-[#166534] font-bold'
+                    : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                >
+                  Lead List
+                </button>
+              </div>
+            )}
+          </div>
 
           {/* Clients */}
           <div>
@@ -113,11 +162,10 @@ export const EmployeeWorkspace: React.FC<EmployeeWorkspaceProps> = ({ onSwitchTo
                 setClientsOpen(!clientsOpen);
                 setActiveTab('clients');
               }}
-              className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl transition-all ${
-                activeTab === 'clients'
-                  ? 'bg-[#111827] text-white shadow-md'
-                  : 'text-slate-700 hover:bg-[#b8ccb6] hover:text-slate-900'
-              }`}
+              className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl transition-all ${activeTab === 'clients'
+                ? 'bg-[#111827] text-white shadow-md'
+                : 'text-slate-700 hover:bg-[#b8ccb6] hover:text-slate-900'
+                }`}
             >
               <div className="flex items-center space-x-3">
                 <UserCheck className="h-4 w-4 shrink-0" />
@@ -136,9 +184,8 @@ export const EmployeeWorkspace: React.FC<EmployeeWorkspaceProps> = ({ onSwitchTo
                     setClientsFilter('');
                     setActiveTab('clients');
                   }}
-                  className={`w-full text-left py-1.5 px-3 rounded-lg text-[11px] font-medium transition-all ${
-                    activeTab === 'clients' ? 'bg-[#e2ede0] text-[#166534] font-bold' : 'text-slate-600 hover:text-slate-900'
-                  }`}
+                  className={`w-full text-left py-1.5 px-3 rounded-lg text-[11px] font-medium transition-all ${activeTab === 'clients' ? 'bg-[#e2ede0] text-[#166534] font-bold' : 'text-slate-600 hover:text-slate-900'
+                    }`}
                 >
                   Client List
                 </button>
@@ -153,11 +200,10 @@ export const EmployeeWorkspace: React.FC<EmployeeWorkspaceProps> = ({ onSwitchTo
                 setAgreementsOpen(!agreementsOpen);
                 setActiveTab('agreements');
               }}
-              className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl transition-all ${
-                activeTab === 'agreements'
-                  ? 'bg-[#111827] text-white shadow-md'
-                  : 'text-slate-700 hover:bg-[#b8ccb6] hover:text-slate-900'
-              }`}
+              className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl transition-all ${activeTab === 'agreements'
+                ? 'bg-[#111827] text-white shadow-md'
+                : 'text-slate-700 hover:bg-[#b8ccb6] hover:text-slate-900'
+                }`}
             >
               <div className="flex items-center space-x-3">
                 <FileSignature className="h-4 w-4 shrink-0" />
@@ -176,9 +222,8 @@ export const EmployeeWorkspace: React.FC<EmployeeWorkspaceProps> = ({ onSwitchTo
                     setAgreementPreselect(null);
                     setActiveTab('agreements');
                   }}
-                  className={`w-full text-left py-1.5 px-3 rounded-lg text-[11px] font-medium transition-all ${
-                    activeTab === 'agreements' ? 'bg-[#e2ede0] text-[#166534] font-bold' : 'text-slate-600 hover:text-slate-900'
-                  }`}
+                  className={`w-full text-left py-1.5 px-3 rounded-lg text-[11px] font-medium transition-all ${activeTab === 'agreements' ? 'bg-[#e2ede0] text-[#166534] font-bold' : 'text-slate-600 hover:text-slate-900'
+                    }`}
                 >
                   Agreement List
                 </button>
@@ -280,6 +325,14 @@ export const EmployeeWorkspace: React.FC<EmployeeWorkspaceProps> = ({ onSwitchTo
         <main className="flex-1 overflow-y-auto p-4 sm:p-6 bg-[#f9fafb]">
           {activeTab === 'dashboard' && (
             <EmployeeDashboardView onNavigateTab={handleNavigateFromDashboard} />
+          )}
+          {activeTab === 'leads' && (
+            <EmployeeLeadsView
+              key={`leads-${leadsNavKey}-${leadsFilter}`}
+              initialStatusFilter={leadsFilter}
+              onNavigateToAgreement={handleNavigateToAgreement}
+              onNavigateToClients={() => setActiveTab('clients')}
+            />
           )}
           {activeTab === 'clients' && (
             <EmployeeClientsView

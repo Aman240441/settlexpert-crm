@@ -375,6 +375,53 @@ function initDatabase() {
       assigned_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
 
+    -- =====================================================
+    -- ADVOCATE LEGAL & DEMAND NOTICES MANAGEMENT
+    -- =====================================================
+    CREATE TABLE IF NOT EXISTS legal_notices (
+      id TEXT PRIMARY KEY,
+      notice_number TEXT UNIQUE NOT NULL,
+      client_id TEXT REFERENCES clients(id) ON DELETE SET NULL,
+      client_name TEXT,
+      bank_name TEXT NOT NULL,
+      loan_account_no TEXT,
+      notice_type TEXT NOT NULL DEFAULT 'Anti-Harassment Notice',
+      notice_subject TEXT,
+      notice_content TEXT,
+      notice_date TEXT NOT NULL,
+      dispatch_date TEXT,
+      speed_post_number TEXT,
+      tracking_url TEXT,
+      status TEXT NOT NULL DEFAULT 'Draft',
+      advocate_id TEXT REFERENCES users(id) ON DELETE SET NULL,
+      advocate_name TEXT,
+      created_by TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS demand_notices (
+      id TEXT PRIMARY KEY,
+      demand_number TEXT UNIQUE NOT NULL,
+      client_id TEXT REFERENCES clients(id) ON DELETE SET NULL,
+      client_name TEXT,
+      bank_name TEXT NOT NULL,
+      loan_account_no TEXT,
+      demand_type TEXT NOT NULL DEFAULT 'Incoming Loan Recall Demand',
+      demand_amount REAL NOT NULL DEFAULT 0,
+      settlement_offer_amount REAL DEFAULT 0,
+      notice_date TEXT NOT NULL,
+      reply_due_date TEXT,
+      status TEXT NOT NULL DEFAULT 'Pending Review',
+      remarks TEXT,
+      file_attachment TEXT,
+      advocate_id TEXT REFERENCES users(id) ON DELETE SET NULL,
+      advocate_name TEXT,
+      created_by TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
 
     -- =====================================================
     -- CENTRALIZED STAFF PROFILE TABLES
@@ -570,10 +617,10 @@ function runMigrations() {
 
 function seedDefaultData() {
   const adminCheck = db.prepare(`SELECT id FROM users WHERE email = ?`).get('settlexperts@gmail.com');
-  
+
   if (!adminCheck) {
     console.log('Seeding initial Settl Expert database data...');
-    
+
     // 1. Departments
     const depts = [
       { id: 'dept-hr', name: 'Human Resources', code: 'HR', description: 'Talent acquisition, employee welfare & policy governance' },
@@ -622,9 +669,9 @@ function seedDefaultData() {
     // 3. Super Admin User
     const adminPasswordHash = bcrypt.hashSync('settlexpert931075@Abc', 10);
     db.prepare(`
-      INSERT INTO users (id, name, email, phone, password_hash, role, emp_or_mgr_id, status, joining_date)
+      INSERT OR IGNORE INTO users (id, name, email, phone, password_hash, role, emp_or_mgr_id, status, joining_date)
       VALUES (?, ?, ?, ?, ?, 'admin', 'ADM-001', 'active', '2025-01-01')
-    `).run('user-admin-01', 'Super Administrator', 'settlexperts@gmail.com', '+91 9876543210', adminPasswordHash);
+    `).run('4', 'Admin User', 'settlexperts@gmail.com', '+91 9876543210', adminPasswordHash);
 
     // 4. Default Fee Plans
     const plans = [
@@ -661,11 +708,11 @@ function ensureMonthlyPaymentSchedules() {
     const agreements = db.prepare(`SELECT * FROM agreements`).all();
     for (const agr of agreements) {
       if (!agr.client_id) continue;
-      
+
       const durStr = agr.resolution_duration || '6 Months';
       const durMatch = durStr.match(/(\d+)/);
       const durNum = durMatch ? parseInt(durMatch[1], 10) : 6;
-      
+
       let monthlyFee = 8000;
       if (agr.monthly_fee && agr.monthly_fee > 0) {
         monthlyFee = agr.monthly_fee;
@@ -679,9 +726,9 @@ function ensureMonthlyPaymentSchedules() {
       db.prepare(`UPDATE agreements SET monthly_fee = ?, total_fee = ? WHERE id = ?`).run(monthlyFee, totalAgreementFee, agr.id);
       db.prepare(`UPDATE clients SET sx_fee = ?, pending_amount = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`)
         .run(totalAgreementFee, totalAgreementFee, agr.client_id);
-      
+
       const existing = db.prepare(`SELECT * FROM monthly_payment_records WHERE client_id = ? ORDER BY month_number ASC`).all(agr.client_id);
-      
+
       if (!existing || existing.length === 0) {
         const baseDate = new Date(agr.start_date || agr.created_at || '2026-08-01');
         const insertStmt = db.prepare(`
@@ -689,7 +736,7 @@ function ensureMonthlyPaymentSchedules() {
             id, client_id, agreement_id, month_number, due_date, expected_amount, received_amount, payment_status, created_at, updated_at
           ) VALUES (?, ?, ?, ?, ?, ?, 0, 'Pending', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
         `);
-        
+
         for (let i = 0; i < durNum; i++) {
           const d = new Date(baseDate);
           d.setMonth(baseDate.getMonth() + i);
@@ -798,7 +845,7 @@ function runPaymentDueCheck(targetDateStr) {
             0, 'active', employeeId
           );
         }
-      } 
+      }
       // 3. If overdue (diffDays > 0)
       else if (diffDays > 0) {
         // Resolve due today if it existed

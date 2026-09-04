@@ -25,6 +25,7 @@ import { api } from '../../services/api';
 import { Modal } from '../common/Modal';
 import { Badge } from '../common/Badge';
 import { AgreementDocumentView } from '../employee/AgreementDocumentView';
+import { ClientDetailsUnifiedView } from '../crm/ClientDetailsUnifiedView';
 
 interface ManagerClientsViewProps {
   managerType?: string;
@@ -41,9 +42,11 @@ export const ManagerClientsView: React.FC<ManagerClientsViewProps> = ({ managerT
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
 
-  // Mode: 'list' | 'document_view'
-  const [viewMode, setViewMode] = useState<'list' | 'document_view'>('list');
+  // Mode: 'list' | 'document_view' | 'view_details'
+  const [viewMode, setViewMode] = useState<'list' | 'document_view' | 'view_details'>('list');
   const [selectedAgreementData, setSelectedAgreementData] = useState<any>(null);
+  const [selectedClientForDetails, setSelectedClientForDetails] = useState<any>(null);
+  const [selectedClientMonthlyPayments, setSelectedClientMonthlyPayments] = useState<any>(null);
 
   // Modals & Drawers
   const [selectedClient360, setSelectedClient360] = useState<any>(null);
@@ -132,6 +135,25 @@ export const ManagerClientsView: React.FC<ManagerClientsViewProps> = ({ managerT
     }
   };
 
+  const handleOpenClientDetails = async (client: any) => {
+    try {
+      setLoading(true);
+      const [detailed, monthlyRes] = await Promise.all([
+        api.getCRMClient(client.id),
+        api.getCRMClientMonthlyPayments(client.id).catch(() => null)
+      ]);
+      setSelectedClientForDetails(detailed);
+      setSelectedClientMonthlyPayments(monthlyRes);
+      setViewMode('view_details');
+    } catch (err) {
+      setSelectedClientForDetails({ client });
+      setSelectedClientMonthlyPayments(null);
+      setViewMode('view_details');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleOpenAgreement = async (client: any) => {
     try {
       const detailed = await api.getCRMClient(client.id);
@@ -178,6 +200,27 @@ export const ManagerClientsView: React.FC<ManagerClientsViewProps> = ({ managerT
     }).format(amt || 0);
   };
 
+  // Render Full Client Details & Onboarding Form View
+  if (viewMode === 'view_details' && selectedClientForDetails) {
+    const clientData = selectedClientForDetails.client || selectedClientForDetails;
+    return (
+      <ClientDetailsUnifiedView
+        client={clientData}
+        lenders={selectedClientForDetails.lenders || []}
+        agreements={selectedClientForDetails.agreements || []}
+        payments={selectedClientForDetails.payments || []}
+        monthlyPaymentData={selectedClientMonthlyPayments}
+        userRole="manager"
+        initialTab="onboarding-form"
+        onBack={() => {
+          setViewMode('list');
+          setSelectedClientForDetails(null);
+        }}
+        onOpenAgreement={handleOpenAgreement}
+      />
+    );
+  }
+
   // Render Document View Mode (Exact same view as Employee CRM)
   if (viewMode === 'document_view' && selectedAgreementData) {
     return (
@@ -196,11 +239,10 @@ export const ManagerClientsView: React.FC<ManagerClientsViewProps> = ({ managerT
       {/* Toast Alert */}
       {feedbackMsg && (
         <div
-          className={`p-3 rounded-lg flex items-center justify-between text-xs font-semibold ${
-            feedbackMsg.type === 'success'
+          className={`p-3 rounded-lg flex items-center justify-between text-xs font-semibold ${feedbackMsg.type === 'success'
               ? 'bg-emerald-50 border border-emerald-300 text-emerald-800'
               : 'bg-rose-50 border border-rose-300 text-rose-800'
-          }`}
+            }`}
         >
           <span>{feedbackMsg.text}</span>
           <button onClick={() => setFeedbackMsg(null)} className="text-slate-500 hover:text-slate-800 font-bold ml-4">
@@ -291,11 +333,25 @@ export const ManagerClientsView: React.FC<ManagerClientsViewProps> = ({ managerT
                 clients.map((c, idx) => (
                   <tr key={c.id} className="hover:bg-gray-50/80 transition-colors">
                     <td className="py-3 px-3 text-slate-500 font-mono">{(page - 1) * limit + idx + 1}</td>
-                    <td className="py-3 px-3 font-mono font-bold text-[#1e40af] whitespace-nowrap">
-                      {c.client_number}
+                    <td className="py-3 px-3">
+                      <button
+                        onClick={() => handleOpenClientDetails(c)}
+                        className="text-left group cursor-pointer"
+                        title="Open Client Details & Onboarding Form"
+                      >
+                        <span className="font-mono font-bold text-[#1e40af] block group-hover:underline">
+                          {c.client_number}
+                        </span>
+                      </button>
                     </td>
                     <td className="py-3 px-3">
-                      <strong className="text-slate-900 block">{c.name}</strong>
+                      <button
+                        onClick={() => handleOpenClientDetails(c)}
+                        className="text-left font-bold text-slate-900 hover:text-blue-700 transition-colors cursor-pointer block"
+                        title="Open Client Details & Onboarding Form"
+                      >
+                        {c.name}
+                      </button>
                       <span className="text-[10px] text-slate-500">{c.city || '—'} • {c.phone}</span>
                     </td>
                     <td className="py-3 px-3 font-medium text-slate-800">{c.employee_name || 'Staff'}</td>
@@ -325,9 +381,9 @@ export const ManagerClientsView: React.FC<ManagerClientsViewProps> = ({ managerT
                     </td>
                     <td className="py-2 px-3 text-right space-x-1.5 whitespace-nowrap">
                       <button
-                        onClick={() => handleOpen360(c)}
-                        title="View Full Client 360"
-                        className="h-7 w-7 rounded border border-gray-200 bg-white hover:bg-gray-50 text-slate-600 hover:text-cyan-600 transition-colors inline-flex items-center justify-center shadow-xs"
+                        onClick={() => handleOpenClientDetails(c)}
+                        title="View Client Details & Onboarding Form"
+                        className="h-7 w-7 rounded border border-gray-200 bg-white hover:bg-gray-50 text-slate-600 hover:text-blue-600 transition-colors inline-flex items-center justify-center shadow-xs cursor-pointer"
                       >
                         <Eye className="h-3.5 w-3.5" />
                       </button>
@@ -420,11 +476,10 @@ export const ManagerClientsView: React.FC<ManagerClientsViewProps> = ({ managerT
       >
         <form onSubmit={handleAssignAdvocate} className="space-y-4 text-xs">
           {/* Current Assignment Banner */}
-          <div className={`p-3 rounded-xl border flex items-center justify-between ${
-            advocateModalClient?.advocate_name
+          <div className={`p-3 rounded-xl border flex items-center justify-between ${advocateModalClient?.advocate_name
               ? 'bg-emerald-50 border-emerald-200'
               : 'bg-amber-50 border-amber-200'
-          }`}>
+            }`}>
             <div>
               <span className="text-slate-500 block text-[10px] uppercase font-bold">Current Assigned Advocate</span>
               {advocateModalClient?.advocate_name ? (
@@ -481,11 +536,10 @@ export const ManagerClientsView: React.FC<ManagerClientsViewProps> = ({ managerT
             <div className="max-h-48 overflow-y-auto space-y-1.5 pr-1">
               <div
                 onClick={() => setSelectedAdvocateId('')}
-                className={`p-2.5 rounded-lg border cursor-pointer transition-all flex items-center justify-between ${
-                  selectedAdvocateId === ''
+                className={`p-2.5 rounded-lg border cursor-pointer transition-all flex items-center justify-between ${selectedAdvocateId === ''
                     ? 'bg-gray-100 border-[#15803d] text-slate-900 font-bold'
                     : 'bg-white border-gray-200 text-slate-600 hover:bg-gray-50'
-                }`}
+                  }`}
               >
                 <div className="flex items-center space-x-2">
                   <div className="h-6 w-6 rounded bg-gray-200 flex items-center justify-center font-bold text-slate-500 text-xs">
@@ -516,16 +570,14 @@ export const ManagerClientsView: React.FC<ManagerClientsViewProps> = ({ managerT
                     <div
                       key={a.id}
                       onClick={() => setSelectedAdvocateId(a.id)}
-                      className={`p-2.5 rounded-lg border cursor-pointer transition-all flex items-center justify-between ${
-                        isSelected
+                      className={`p-2.5 rounded-lg border cursor-pointer transition-all flex items-center justify-between ${isSelected
                           ? 'bg-emerald-50 border-[#15803d] text-slate-900 ring-1 ring-[#15803d]'
                           : 'bg-white border-gray-200 text-slate-700 hover:bg-gray-50'
-                      }`}
+                        }`}
                     >
                       <div className="flex items-center space-x-2.5">
-                        <div className={`h-7 w-7 rounded flex items-center justify-center font-bold text-xs ${
-                          isSelected ? 'bg-[#15803d] text-white' : 'bg-gray-100 text-slate-600'
-                        }`}>
+                        <div className={`h-7 w-7 rounded flex items-center justify-center font-bold text-xs ${isSelected ? 'bg-[#15803d] text-white' : 'bg-gray-100 text-slate-600'
+                          }`}>
                           <Scale className="h-3.5 w-3.5" />
                         </div>
                         <div>

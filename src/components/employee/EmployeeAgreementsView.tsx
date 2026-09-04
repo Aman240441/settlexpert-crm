@@ -24,7 +24,8 @@ import {
   CheckCircle,
   ArrowLeft,
   Edit,
-  Phone
+  Phone,
+  Users
 } from 'lucide-react';
 import { api } from '../../services/api';
 import { Modal } from '../common/Modal';
@@ -37,12 +38,13 @@ interface EmployeeAgreementsViewProps {
 
 export const EmployeeAgreementsView: React.FC<EmployeeAgreementsViewProps> = ({ preselectedClient }) => {
   const [agreements, setAgreements] = useState<any[]>([]);
+  const [clientsList, setClientsList] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(25);
   const [search, setSearch] = useState('');
-  const [selectedDate, setSelectedDate] = useState<string>(getTodayStr());
+  const [selectedDate, setSelectedDate] = useState<string>('');
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
 
@@ -235,21 +237,64 @@ Date: ${executionDate}`;
   const fetchAgreements = async () => {
     try {
       setLoading(true);
-      const res = await api.getCRMAgreements({
-        search: search || undefined,
-        date: selectedDate || undefined,
-        from_date: fromDate || undefined,
-        to_date: toDate || undefined,
-        page,
-        limit
-      });
+      const [res, cliRes] = await Promise.all([
+        api.getCRMAgreements({
+          search: search || undefined,
+          date: selectedDate || undefined,
+          from_date: fromDate || undefined,
+          to_date: toDate || undefined,
+          page,
+          limit
+        }),
+        api.getClients().catch(() => ({ clients: [] }))
+      ]);
       setAgreements(res.agreements || []);
       setTotal(res.pagination?.total || 0);
+      if (cliRes && cliRes.clients) {
+        setClientsList(cliRes.clients);
+      }
     } catch (err: any) {
       setFeedbackMsg({ type: 'error', text: 'Failed to load agreements' });
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleClientSelect = (clientId: string) => {
+    if (!clientId) return;
+    const client = clientsList.find((c) => c.id === clientId);
+    if (!client) return;
+
+    const initialDebt = client.total_debt || 200000;
+    const initialFee = client.sx_fee || Math.max(25000, Math.round(initialDebt * 0.1));
+    const initialIncome = client.monthly_income || 35000;
+
+    const initialLenders = [{ id: '1', bank_name: 'HDFC Bank / ICICI', loan_type: client.loan_type || 'Personal Loan', balance: initialDebt }];
+
+    const updatedData = {
+      client_id: client.id,
+      lead_id: client.lead_id || '',
+      name: client.name || '',
+      pin_number: client.pin_number || '110001',
+      dob: client.dob || '1990-01-01',
+      phone: client.phone || '',
+      email: client.email || '',
+      start_date: new Date().toISOString().split('T')[0],
+      address: client.city || client.address || 'Delhi NCR',
+      agreement_duration: '6 Months',
+      monthly_fee: Math.round(initialFee / 6),
+      total_fee: initialFee,
+      resolution_duration: '6 Months',
+      prepared_by: 'Dhruv Consultant',
+      executed_date: new Date().toISOString().split('T')[0],
+      monthly_income: initialIncome,
+      status: 'active',
+      agreement_body: ''
+    };
+
+    updatedData.agreement_body = generateAgreementTemplate(updatedData, initialLenders);
+    setFormData(updatedData);
+    setLenders(initialLenders);
   };
 
   useEffect(() => {

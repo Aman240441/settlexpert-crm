@@ -69,31 +69,28 @@ export const AdvocateTasksView: React.FC = () => {
         <div className="flex items-center space-x-2">
           <button
             onClick={() => setStatusFilter('all')}
-            className={`px-4 py-1.5 rounded-full text-xs font-bold transition-all ${
-              statusFilter === 'all'
+            className={`px-4 py-1.5 rounded-full text-xs font-bold transition-all ${statusFilter === 'all'
                 ? 'bg-[#111827] text-white shadow-sm'
                 : 'bg-white border border-gray-300 text-slate-700 hover:bg-gray-50'
-            }`}
+              }`}
           >
             All Actions
           </button>
           <button
             onClick={() => setStatusFilter('pending')}
-            className={`px-4 py-1.5 rounded-full text-xs font-bold transition-all ${
-              statusFilter === 'pending'
+            className={`px-4 py-1.5 rounded-full text-xs font-bold transition-all ${statusFilter === 'pending'
                 ? 'bg-[#111827] text-white shadow-sm'
                 : 'bg-white border border-gray-300 text-slate-700 hover:bg-gray-50'
-            }`}
+              }`}
           >
             Pending
           </button>
           <button
             onClick={() => setStatusFilter('completed')}
-            className={`px-4 py-1.5 rounded-full text-xs font-bold transition-all ${
-              statusFilter === 'completed'
+            className={`px-4 py-1.5 rounded-full text-xs font-bold transition-all ${statusFilter === 'completed'
                 ? 'bg-[#111827] text-white shadow-sm'
                 : 'bg-white border border-gray-300 text-slate-700 hover:bg-gray-50'
-            }`}
+              }`}
           >
             Completed
           </button>
@@ -153,9 +150,8 @@ export const AdvocateTasksView: React.FC = () => {
                   </div>
                 </div>
 
-                <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                  t.status === 'completed' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
-                }`}>
+                <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${t.status === 'completed' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
+                  }`}>
                   {t.status === 'completed' ? 'Done' : 'Pending'}
                 </span>
               </div>

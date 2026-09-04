@@ -16,7 +16,8 @@ import {
   StaffProfile
 } from '../types';
 
-const rawApiUrl = (import.meta as any).env?.VITE_API_URL;
+const rawApiUrl = (import.meta as any).env?.VITE_API_URL || 
+  ((import.meta as any).env?.PROD ? 'https://settlexpertcrm-api.onrender.com' : '');
 const API_BASE = rawApiUrl ? (rawApiUrl.endsWith('/api') ? rawApiUrl : `${rawApiUrl.replace(/\/$/, '')}/api`) : '/api';
 
 function getAuthHeader(): Record<string, string> {
@@ -269,7 +270,7 @@ export const api = {
   getReportsSummary: () => request<any>('/crm/reports-summary'),
 
   // Step 2 Employee CRM Dedicated APIs
-  getCRMDashboardSummary: (params?: { date?: string; from_date?: string; to_date?: string; month?: string; year?: string }) => 
+  getCRMDashboardSummary: (params?: { date?: string; from_date?: string; to_date?: string; month?: string; year?: string }) =>
     request<any>(`/crm/dashboard/summary${toQueryString(params)}`),
   getCRMLeads: (params?: { search?: string; status?: string; date?: string; calendar_date?: string; from_date?: string; to_date?: string; page?: number; limit?: number }) => {
     return request<any>(`/crm/leads${toQueryString(params)}`);
@@ -342,6 +343,26 @@ export const api = {
     request<any>(`/advocate-portal/cases/${caseId}/tasks`, { method: 'POST', body: JSON.stringify(data) }),
   getAdvocateProfile: () => request<any>('/advocate-portal/profile'),
 
+  // Advocate Legal Notices APIs
+  getAdvocateLegalNotices: (params?: { search?: string; status?: string; notice_type?: string; client_id?: string; date?: string; from_date?: string; to_date?: string; page?: number; limit?: number }) =>
+    request<any>(`/advocate-portal/legal-notices${toQueryString(params)}`),
+  createAdvocateLegalNotice: (data: any) =>
+    request<any>('/advocate-portal/legal-notices', { method: 'POST', body: JSON.stringify(data) }),
+  updateAdvocateLegalNotice: (id: string, data: any) =>
+    request<any>(`/advocate-portal/legal-notices/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteAdvocateLegalNotice: (id: string) =>
+    request<any>(`/advocate-portal/legal-notices/${id}`, { method: 'DELETE' }),
+
+  // Advocate Demand Notices APIs
+  getAdvocateDemandNotices: (params?: { search?: string; status?: string; demand_type?: string; client_id?: string; page?: number; limit?: number }) =>
+    request<any>(`/advocate-portal/demand-notices${toQueryString(params)}`),
+  createAdvocateDemandNotice: (data: any) =>
+    request<any>('/advocate-portal/demand-notices', { method: 'POST', body: JSON.stringify(data) }),
+  updateAdvocateDemandNotice: (id: string, data: any) =>
+    request<any>(`/advocate-portal/demand-notices/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteAdvocateDemandNotice: (id: string) =>
+    request<any>(`/advocate-portal/demand-notices/${id}`, { method: 'DELETE' }),
+
   // Payment Due Date Notifications APIs
   getCRMNotifications: (params?: { status?: string; type?: string; is_read?: number }) => {
     return request<any>(`/crm/notifications${toQueryString(params)}`);
@@ -401,4 +422,33 @@ export const api = {
     request<{ history: any[] }>(`/crm/lead-import/lead-history/${leadId}`),
   getUnassignedLeads: () =>
     request<{ leads: any[] }>('/crm/lead-import/unassigned-leads'),
+
+  // ─── RBI & Social Complaints APIs ──────────────────────────────────────────
+  getComplaints: (params?: { client_id?: string; status?: string; complaint_type?: string; search?: string }) =>
+    request<{ complaints: import('../types').ClientComplaint[] }>(`/crm/complaints${toQueryString(params)}`),
+  createComplaint: (data: {
+    client_id: string;
+    complaint_type?: string;
+    bank_name: string;
+    loan_account_no?: string;
+    tweet_url?: string;
+    complaint_ref_no?: string;
+    screenshot_url?: string;
+    file_name?: string;
+    description?: string;
+    status?: string;
+  }) => request<{ message: string; complaint: import('../types').ClientComplaint }>('/crm/complaints', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  }),
+  updateComplaintStatus: (id: string, status: string) =>
+    request<{ message: string; complaint: import('../types').ClientComplaint }>(`/crm/complaints/${id}/status`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status }),
+    }),
+  deleteComplaint: (id: string) =>
+    request<{ message: string }>(`/crm/complaints/${id}`, {
+      method: 'DELETE',
+    }),
 };
+

@@ -96,8 +96,8 @@ export const LeadsView: React.FC<LeadsViewProps> = ({ onNavigateToImport }) => {
       {feedbackMsg && (
         <div
           className={`p-4 rounded-xl flex items-center justify-between text-xs font-semibold ${feedbackMsg.type === 'success'
-              ? 'bg-emerald-500/10 border border-emerald-500/30 text-emerald-400'
-              : 'bg-rose-500/10 border border-rose-500/30 text-rose-400'
+            ? 'bg-emerald-500/10 border border-emerald-500/30 text-emerald-400'
+            : 'bg-rose-500/10 border border-rose-500/30 text-rose-400'
             }`}
         >
           <span>{feedbackMsg.text}</span>
