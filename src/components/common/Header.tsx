@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Search, LogOut, ChevronDown, Maximize2 } from 'lucide-react';
+import { Search, LogOut, ChevronDown, Maximize2, Calendar, Mail, Briefcase, Shield } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { NotificationBell } from './NotificationBell';
 
@@ -104,39 +104,79 @@ export const Header: React.FC<HeaderProps> = ({ currentSection, onSearchChange, 
               setShowProfileMenu(!showProfileMenu);
               setShowNotifications(false);
             }}
-            className="flex items-center space-x-2.5 p-1 pl-2 rounded-xl hover:bg-[#b8ccb6] transition-colors cursor-pointer"
+            className="flex items-center space-x-2.5 p-1 pl-1.5 rounded-xl hover:bg-[#b8ccb6] transition-colors cursor-pointer"
             aria-label="User profile menu"
             aria-expanded={showProfileMenu}
           >
-            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#15803d] text-xs font-bold text-white shadow-xs">
-              {user?.name ? user.name.charAt(0) : 'A'}
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#15803d] text-xs font-black text-white shadow-xs overflow-hidden border border-emerald-600/30">
+              {user?.profile_image ? (
+                <img src={user.profile_image} alt={user.name} className="h-full w-full object-cover" />
+              ) : (
+                <span>{user?.name ? user.name.charAt(0).toUpperCase() : 'A'}</span>
+              )}
             </div>
             <div className="hidden text-left lg:block">
-              <span className="text-xs font-bold text-slate-900 block leading-tight">{user?.name}</span>
-              <span className="text-[10px] text-[#166534] font-semibold block leading-tight">Master Admin</span>
+              <span className="text-xs font-bold text-slate-900 block leading-tight truncate max-w-[130px]">{user?.name}</span>
+              <span className="text-[10px] text-[#166534] font-bold block leading-tight">Super Administrator</span>
             </div>
             <ChevronDown className="h-3.5 w-3.5 text-slate-600" />
           </button>
 
           {showProfileMenu && (
-            <div className="absolute right-0 mt-2 w-56 rounded-2xl bg-white border border-gray-200 shadow-2xl p-2 z-[100] animate-fade-in text-slate-800 text-xs">
-              <div className="p-3 border-b border-gray-100">
-                <span className="font-bold text-slate-900 block">{user?.name}</span>
-                <span className="text-[11px] text-slate-500 font-mono block">{user?.email}</span>
-                <span className="inline-block mt-1 px-2 py-0.5 rounded bg-emerald-100 text-[#166534] text-[10px] font-bold">
-                  Super Administrator
-                </span>
+            <div className="absolute right-0 mt-2 w-72 rounded-2xl bg-white border border-slate-200/90 shadow-2xl z-[100] animate-fade-in text-slate-800 text-xs overflow-hidden text-left">
+              {/* Header Banner */}
+              <div className="p-4 bg-gradient-to-br from-emerald-800 via-[#15803d] to-teal-800 text-white">
+                <div className="flex items-center space-x-3">
+                  <div className="h-12 w-12 rounded-xl bg-white/15 border-2 border-white/40 text-white flex items-center justify-center font-black text-lg shadow-md overflow-hidden shrink-0">
+                    {user?.profile_image ? (
+                      <img src={user.profile_image} alt={user.name} className="h-full w-full object-cover" />
+                    ) : (
+                      <span>{user?.name ? user.name.charAt(0).toUpperCase() : 'A'}</span>
+                    )}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <h4 className="text-sm font-black text-white truncate leading-tight">{user?.name}</h4>
+                    <p className="text-[11px] text-emerald-200 font-bold truncate mt-0.5">Super Administrator</p>
+                    <span className="inline-block mt-1 px-2 py-0.2 rounded-md bg-emerald-500/40 border border-emerald-300/40 text-[9px] font-bold text-white uppercase tracking-wider">
+                      Master Control
+                    </span>
+                  </div>
+                </div>
               </div>
-              <div className="p-1">
+
+              {/* Profile Details List */}
+              <div className="p-3 space-y-2 text-[11px] text-slate-700 bg-slate-50/60 border-b border-slate-100">
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-500 flex items-center gap-1.5 font-medium">
+                    <Calendar className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+                    <span>Joining Date</span>
+                  </span>
+                  <span className="font-bold text-slate-800 font-mono">
+                    {user?.joining_date ? new Date(user.joining_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : 'Permanent'}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-500 flex items-center gap-1.5 font-medium">
+                    <Mail className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+                    <span>Email</span>
+                  </span>
+                  <span className="font-medium text-slate-800 truncate max-w-[150px]" title={user?.email}>
+                    {user?.email}
+                  </span>
+                </div>
+              </div>
+
+              <div className="p-1.5 space-y-0.5">
                 <button
                   type="button"
                   onClick={() => {
                     setShowProfileMenu(false);
                     onNavigate('settings');
                   }}
-                  className="w-full text-left px-3 py-2 rounded-xl hover:bg-gray-50 font-semibold text-slate-700 transition-colors cursor-pointer"
+                  className="w-full text-left px-3 py-2 rounded-xl hover:bg-slate-50 font-semibold text-slate-700 transition-colors cursor-pointer flex items-center space-x-2"
                 >
-                  System Settings
+                  <Briefcase className="h-3.5 w-3.5 text-slate-500" />
+                  <span>System Settings</span>
                 </button>
                 <button
                   type="button"
@@ -144,14 +184,15 @@ export const Header: React.FC<HeaderProps> = ({ currentSection, onSearchChange, 
                     setShowProfileMenu(false);
                     onNavigate('audit');
                   }}
-                  className="w-full text-left px-3 py-2 rounded-xl hover:bg-gray-50 font-semibold text-slate-700 transition-colors cursor-pointer"
+                  className="w-full text-left px-3 py-2 rounded-xl hover:bg-slate-50 font-semibold text-slate-700 transition-colors cursor-pointer flex items-center space-x-2"
                 >
-                  Global Audit Logs
+                  <Shield className="h-3.5 w-3.5 text-slate-500" />
+                  <span>Global Audit Logs</span>
                 </button>
                 <button
                   type="button"
                   onClick={logout}
-                  className="w-full text-left px-3 py-2 rounded-xl hover:bg-rose-50 text-rose-600 font-bold transition-colors flex items-center space-x-1.5 cursor-pointer"
+                  className="w-full text-left px-3 py-2 rounded-xl hover:bg-rose-50 text-rose-600 font-bold transition-colors flex items-center space-x-2 cursor-pointer"
                 >
                   <LogOut className="h-3.5 w-3.5" />
                   <span>Sign Out</span>

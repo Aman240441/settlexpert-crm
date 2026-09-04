@@ -23,6 +23,7 @@ export interface User {
   manager_type_id?: string;
   manager_type_name?: string;
   manager_type_code?: string;
+  designation?: string;
   joining_date?: string;
   id_type?: string;
   id_front?: string;

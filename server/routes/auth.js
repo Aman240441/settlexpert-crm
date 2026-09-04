@@ -184,22 +184,34 @@ router.post('/login', (req, res) => {
       { expiresIn: '24h' }
     );
 
-    const safeUser = {
-      id: user.id,
-      name: user.name,
-      email: user.email,
-      phone: user.phone,
-      role: user.role,
-      emp_or_mgr_id: user.emp_or_mgr_id,
-      profile_image: user.profile_image,
-      department_id: user.department_id,
-      status: user.status
-    };
+    const fullUser = db.prepare(`
+      SELECT u.id, u.name, u.email, u.phone, u.role, u.emp_or_mgr_id, 
+             u.profile_image, u.department_id, u.team_id, u.manager_id, 
+             u.manager_type_id, u.status, u.joining_date, u.id_type,
+             d.name as department_name, mt.name as manager_type_name,
+             COALESCE(sep.designation, mt.name, CASE WHEN u.role = 'admin' THEN 'Super Administrator' WHEN u.role = 'advocate' THEN 'Legal Advocate' WHEN u.role = 'manager' THEN 'Manager' ELSE 'Employee' END) as designation
+      FROM users u
+      LEFT JOIN departments d ON u.department_id = d.id
+      LEFT JOIN manager_types mt ON u.manager_type_id = mt.id
+      LEFT JOIN staff_extended_profiles sep ON u.id = sep.user_id
+      WHERE u.id = ?
+    `).get(user.id);
 
     res.json({
       message: 'Login successful',
       token,
-      user: safeUser
+      user: fullUser || {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        phone: user.phone,
+        role: user.role,
+        emp_or_mgr_id: user.emp_or_mgr_id,
+        profile_image: user.profile_image,
+        department_id: user.department_id,
+        joining_date: user.joining_date,
+        status: user.status
+      }
     });
   } catch (err) {
     console.error('Login error:', err);
@@ -214,10 +226,12 @@ router.get('/me', authenticateToken, (req, res) => {
       SELECT u.id, u.name, u.email, u.phone, u.role, u.emp_or_mgr_id, 
              u.profile_image, u.department_id, u.team_id, u.manager_id, 
              u.manager_type_id, u.status, u.joining_date, u.id_type,
-             d.name as department_name, mt.name as manager_type_name
+             d.name as department_name, mt.name as manager_type_name,
+             COALESCE(sep.designation, mt.name, CASE WHEN u.role = 'admin' THEN 'Super Administrator' WHEN u.role = 'advocate' THEN 'Legal Advocate' WHEN u.role = 'manager' THEN 'Manager' ELSE 'Employee' END) as designation
       FROM users u
       LEFT JOIN departments d ON u.department_id = d.id
       LEFT JOIN manager_types mt ON u.manager_type_id = mt.id
+      LEFT JOIN staff_extended_profiles sep ON u.id = sep.user_id
       WHERE u.id = ?
     `).get(req.user.id);
 

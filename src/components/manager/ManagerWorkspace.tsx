@@ -19,7 +19,11 @@ import {
   ChevronDown,
   ChevronRight,
   User as UserIcon,
-  FileSpreadsheet
+  FileSpreadsheet,
+  Calendar,
+  Mail,
+  Phone,
+  Building2
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { api } from '../../services/api';
@@ -429,53 +433,144 @@ export const ManagerWorkspace: React.FC<ManagerWorkspaceProps> = ({ onSwitchToAd
               <button
                 type="button"
                 onClick={() => setShowProfileMenu(!showProfileMenu)}
-                className="flex items-center space-x-2 p-1 pl-2 rounded-xl hover:bg-[#b8ccb6] transition-colors cursor-pointer"
+                className="flex items-center space-x-2.5 p-1 pl-1.5 rounded-xl hover:bg-[#b8ccb6] transition-colors cursor-pointer"
                 aria-label="Manager profile menu"
                 aria-expanded={showProfileMenu}
               >
-                <div className="h-8 w-8 rounded-full bg-[#15803d] text-white flex items-center justify-center font-bold text-xs shadow-xs">
-                  {user?.name ? user.name.charAt(0) : 'M'}
+                <div className="h-9 w-9 rounded-xl bg-[#15803d] text-white flex items-center justify-center font-black text-xs shadow-xs overflow-hidden border border-emerald-600/30">
+                  {user?.profile_image ? (
+                    <img src={user.profile_image} alt={user.name} className="h-full w-full object-cover" />
+                  ) : (
+                    <span>{user?.name ? user.name.charAt(0).toUpperCase() : 'M'}</span>
+                  )}
                 </div>
-                <span className="text-xs font-bold text-slate-800 hidden md:block">
-                  {user?.name || 'Manager'}
-                </span>
+                <div className="hidden md:flex flex-col text-left">
+                  <span className="text-xs font-bold text-slate-800 leading-tight truncate max-w-[130px]">
+                    {user?.name || 'Manager'}
+                  </span>
+                  <span className="text-[10px] text-emerald-800 font-semibold leading-tight truncate max-w-[130px]">
+                    {user?.designation || user?.manager_type_name || `${managerType} Manager`}
+                  </span>
+                </div>
                 <ChevronDown className="h-3.5 w-3.5 text-slate-600" />
               </button>
 
               {/* Profile Dropdown Popup */}
               {showProfileMenu && (
-                <div className="absolute right-0 mt-2 w-64 bg-white rounded-xl shadow-xl border border-gray-200 py-2 z-[100] animate-in fade-in zoom-in-95 duration-100">
-                  <div className="px-4 py-2 border-b border-gray-100">
-                    <p className="text-xs font-bold text-slate-900 truncate">{user?.name}</p>
-                    <p className="text-[11px] text-slate-500 truncate">{user?.email}</p>
-                    <span className="inline-block mt-1 px-2 py-0.5 rounded bg-emerald-100 text-[#166534] text-[10px] font-bold">
-                      {managerType} Manager
-                    </span>
+                <div className="absolute right-0 mt-2 w-80 bg-white rounded-2xl shadow-2xl border border-slate-200/90 py-0 z-[100] animate-in fade-in zoom-in-95 duration-100 overflow-hidden text-left">
+                  {/* Header Banner with Profile Picture & Info */}
+                  <div className="p-4 bg-gradient-to-br from-emerald-800 via-[#15803d] to-teal-800 text-white relative">
+                    <div className="flex items-center space-x-3.5">
+                      <div className="h-14 w-14 rounded-2xl bg-white/15 border-2 border-white/40 text-white flex items-center justify-center font-black text-xl shadow-lg overflow-hidden shrink-0">
+                        {user?.profile_image ? (
+                          <img src={user.profile_image} alt={user.name} className="h-full w-full object-cover" />
+                        ) : (
+                          <span>{user?.name ? user.name.charAt(0).toUpperCase() : 'M'}</span>
+                        )}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <h4 className="text-sm font-black text-white truncate leading-tight">{user?.name}</h4>
+                        <p className="text-[11px] text-emerald-200 font-bold truncate mt-0.5">
+                          {user?.designation || user?.manager_type_name || `${managerType} Manager`}
+                        </p>
+                        <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+                          <span className="px-2 py-0.5 rounded-md bg-emerald-500/40 border border-emerald-300/40 text-[10px] font-bold text-white tracking-wide font-mono">
+                            {user?.emp_or_mgr_id || 'ID: —'}
+                          </span>
+                          <span className="px-2 py-0.5 rounded-md bg-white/20 text-[10px] font-bold text-white uppercase tracking-wider">
+                            {managerType} Manager
+                          </span>
+                        </div>
+                      </div>
+                    </div>
                   </div>
 
-                  {onSwitchToAdmin && (
+                  {/* Profile Details List */}
+                  <div className="p-3.5 space-y-2.5 text-xs text-slate-700 bg-slate-50/50 border-b border-slate-100">
+                    {/* Designation */}
+                    <div className="flex items-center justify-between text-[11px]">
+                      <span className="text-slate-500 flex items-center gap-1.5 font-medium">
+                        <Briefcase className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+                        <span>Designation</span>
+                      </span>
+                      <span className="font-bold text-slate-800 truncate max-w-[160px]">
+                        {user?.designation || user?.manager_type_name || `${managerType} Manager`}
+                      </span>
+                    </div>
+
+                    {/* Joining Date */}
+                    <div className="flex items-center justify-between text-[11px]">
+                      <span className="text-slate-500 flex items-center gap-1.5 font-medium">
+                        <Calendar className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+                        <span>Joining Date</span>
+                      </span>
+                      <span className="font-bold text-slate-800 font-mono">
+                        {user?.joining_date ? new Date(user.joining_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '04 Sep 2026'}
+                      </span>
+                    </div>
+
+                    {/* Department */}
+                    <div className="flex items-center justify-between text-[11px]">
+                      <span className="text-slate-500 flex items-center gap-1.5 font-medium">
+                        <Building2 className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+                        <span>Department</span>
+                      </span>
+                      <span className="font-bold text-slate-800 truncate max-w-[160px]">
+                        {user?.department_name || `${managerType} Department`}
+                      </span>
+                    </div>
+
+                    {/* Email */}
+                    <div className="flex items-center justify-between text-[11px]">
+                      <span className="text-slate-500 flex items-center gap-1.5 font-medium">
+                        <Mail className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+                        <span>Email</span>
+                      </span>
+                      <span className="font-medium text-slate-800 truncate max-w-[160px]" title={user?.email}>
+                        {user?.email}
+                      </span>
+                    </div>
+
+                    {/* Phone */}
+                    {user?.phone && (
+                      <div className="flex items-center justify-between text-[11px]">
+                        <span className="text-slate-500 flex items-center gap-1.5 font-medium">
+                          <Phone className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+                          <span>Phone</span>
+                        </span>
+                        <span className="font-medium text-slate-800 font-mono">
+                          {user.phone}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Actions */}
+                  <div className="p-2 space-y-1">
+                    {onSwitchToAdmin && (
+                      <button
+                        onClick={() => {
+                          setShowProfileMenu(false);
+                          onSwitchToAdmin();
+                        }}
+                        className="w-full text-left px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 rounded-xl flex items-center space-x-2 transition-colors cursor-pointer"
+                      >
+                        <ArrowLeftRight className="h-3.5 w-3.5 text-indigo-600" />
+                        <span>Switch to Master Admin</span>
+                      </button>
+                    )}
+
                     <button
                       onClick={() => {
                         setShowProfileMenu(false);
-                        onSwitchToAdmin();
+                        logout();
                       }}
-                      className="w-full text-left px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-gray-50 flex items-center space-x-2 border-b border-gray-100"
+                      className="w-full text-left px-3 py-2 text-xs font-semibold text-rose-600 hover:bg-rose-50 rounded-xl flex items-center space-x-2 transition-colors cursor-pointer"
                     >
-                      <ArrowLeftRight className="h-3.5 w-3.5 text-indigo-600" />
-                      <span>Switch to Master Admin</span>
+                      <LogOut className="h-3.5 w-3.5" />
+                      <span>Sign Out</span>
                     </button>
-                  )}
-
-                  <button
-                    onClick={() => {
-                      setShowProfileMenu(false);
-                      logout();
-                    }}
-                    className="w-full text-left px-4 py-2 text-xs font-semibold text-rose-600 hover:bg-rose-50 flex items-center space-x-2"
-                  >
-                    <LogOut className="h-3.5 w-3.5" />
-                    <span>Sign Out</span>
-                  </button>
+                  </div>
                 </div>
               )}
             </div>
