@@ -202,8 +202,12 @@ export const AdvocatesView: React.FC = () => {
             <div className="space-y-3">
               <div className="flex items-start justify-between">
                 <div className="flex items-center space-x-3">
-                  <div className="h-11 w-11 rounded-2xl bg-purple-50 text-purple-700 font-black flex items-center justify-center text-base border border-purple-100 shadow-2xs">
-                    {adv.name.charAt(0)}
+                  <div className="h-11 w-11 rounded-2xl bg-purple-50 text-purple-700 font-black flex items-center justify-center text-base border border-purple-100 shadow-2xs overflow-hidden shrink-0">
+                    {adv.profile_image ? (
+                      <img src={adv.profile_image} alt={adv.name} className="h-full w-full object-cover" />
+                    ) : (
+                      adv.name.charAt(0)
+                    )}
                   </div>
                   <div>
                     <h3 className="text-sm font-bold text-slate-900 tracking-tight">{adv.name}</h3>

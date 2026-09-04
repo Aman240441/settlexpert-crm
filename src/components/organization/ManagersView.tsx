@@ -312,8 +312,12 @@ export const ManagersView: React.FC = () => {
                   <tr key={mgr.id} className="hover:bg-slate-50/80 transition-colors">
                     <td className="py-3.5 px-4">
                       <div className="flex items-center space-x-3">
-                        <div className="h-9 w-9 rounded-xl bg-blue-100 text-blue-700 font-bold flex items-center justify-center text-sm border border-blue-200 shrink-0">
-                          {mgr.name.charAt(0)}
+                        <div className="h-9 w-9 rounded-xl bg-blue-100 text-blue-700 font-bold flex items-center justify-center text-sm border border-blue-200 shrink-0 overflow-hidden">
+                          {mgr.profile_image ? (
+                            <img src={mgr.profile_image} alt={mgr.name} className="h-full w-full object-cover" />
+                          ) : (
+                            mgr.name.charAt(0)
+                          )}
                         </div>
                         <div>
                           <p className="font-bold text-slate-900 tracking-tight">{mgr.name}</p>
@@ -570,8 +574,12 @@ export const ManagersView: React.FC = () => {
           <div className="space-y-6">
             {/* Quick Profile Card */}
             <div className="p-5 rounded-2xl bg-slate-950 border border-slate-800 flex items-center space-x-4">
-              <div className="h-16 w-16 rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-600 text-white font-black text-2xl flex items-center justify-center shadow-lg">
-                {selectedManager.name.charAt(0)}
+              <div className="h-16 w-16 rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-600 text-white font-black text-2xl flex items-center justify-center shadow-lg overflow-hidden shrink-0">
+                {selectedManager.profile_image ? (
+                  <img src={selectedManager.profile_image} alt={selectedManager.name} className="h-full w-full object-cover" />
+                ) : (
+                  selectedManager.name.charAt(0)
+                )}
               </div>
               <div className="space-y-1">
                 <div className="flex items-center space-x-2">
@@ -596,10 +604,19 @@ export const ManagersView: React.FC = () => {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 {selectedManagerEmps.length > 0 ? (
                   selectedManagerEmps.map((emp) => (
-                    <div key={emp.id} className="p-3 rounded-xl bg-slate-950 border border-slate-800 text-left">
-                      <p className="text-xs font-bold text-white">{emp.name}</p>
-                      <p className="text-[11px] text-slate-400 font-mono">{emp.emp_or_mgr_id}</p>
-                      <p className="text-[11px] text-slate-500 truncate">{emp.email}</p>
+                    <div key={emp.id} className="p-3 rounded-xl bg-slate-950 border border-slate-800 text-left flex items-center gap-2.5">
+                      <div className="h-8 w-8 rounded-lg bg-indigo-900/60 text-indigo-300 font-bold flex items-center justify-center text-xs shrink-0 overflow-hidden border border-indigo-700/50">
+                        {emp.profile_image ? (
+                          <img src={emp.profile_image} alt={emp.name} className="h-full w-full object-cover" />
+                        ) : (
+                          emp.name.charAt(0)
+                        )}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-xs font-bold text-white truncate">{emp.name}</p>
+                        <p className="text-[11px] text-slate-400 font-mono">{emp.emp_or_mgr_id}</p>
+                        <p className="text-[11px] text-slate-500 truncate">{emp.email}</p>
+                      </div>
                     </div>
                   ))
                 ) : (

@@ -4,6 +4,7 @@ const bcrypt = require('bcryptjs');
 const { v4: uuidv4 } = require('uuid');
 const db = require('../db/database');
 const { authenticateToken, requireAdmin, logAudit } = require('../middleware/auth');
+const { syncRecord } = require('../db/supabaseClient');
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -140,6 +141,9 @@ router.get('/:id', authenticateToken, (req, res) => {
     logAudit(req, 'Profile Viewed', 'Staff', req.params.id, { staff_name: row.name });
 
     const profile = formatStaffProfile(row, false);
+    if (isAdmin) {
+      profile.aadhaar_full = row.aadhaar_masked_raw || null;
+    }
     // Include KYC doc meta (but not image data) for authorized profile view
     if (isAdmin || isSelf) {
       const kyc = db.prepare(`SELECT kyc_status, aadhaar_front_doc IS NOT NULL as has_front, aadhaar_back_doc IS NOT NULL as has_back FROM staff_kyc WHERE user_id = ?`).get(req.params.id);
@@ -352,33 +356,72 @@ router.put('/:id', authenticateToken, requireAdmin, (req, res) => {
       alt_phone, whatsapp_number, current_address, permanent_address,
       city, state, pin_code, designation, employment_status, staff_type, reporting_manager_id,
       // Advocate
-      registration_number, bar_council_state, specialization, years_experience
+      registration_number, bar_council_state, specialization, years_experience,
+      // Aadhaar KYC
+      aadhaar_number, aadhaar_front_doc, aadhaar_back_doc
     } = req.body;
 
     // Email uniqueness check
-    if (email && email.toLowerCase() !== existing.email) {
+    if (email && email.trim().toLowerCase() !== (existing.email || '').toLowerCase()) {
       const dup = db.prepare(`SELECT id FROM users WHERE email = ? AND id != ?`).get(email.trim().toLowerCase(), req.params.id);
       if (dup) return res.status(400).json({ error: 'Email is already used by another account' });
+    }
+
+    // Staff ID uniqueness check
+    if (emp_or_mgr_id && emp_or_mgr_id.trim().toUpperCase() !== (existing.emp_or_mgr_id || '')) {
+      const dup = db.prepare(`SELECT id FROM users WHERE emp_or_mgr_id = ? AND id != ?`).get(emp_or_mgr_id.trim().toUpperCase(), req.params.id);
+      if (dup) return res.status(400).json({ error: 'This Staff ID is already in use by another user' });
+    }
+
+    // Aadhaar uniqueness check if provided
+    if (aadhaar_number !== undefined && aadhaar_number !== null && aadhaar_number.trim() !== '') {
+      const cleanAadhaar = aadhaar_number.replace(/\s/g, '');
+      const dup = db.prepare(`SELECT user_id FROM staff_kyc WHERE replace(aadhaar_number, ' ', '') = ? AND user_id != ?`).get(cleanAadhaar, req.params.id);
+      if (dup) return res.status(400).json({ error: 'This Aadhaar number is already registered to another staff member' });
+    }
+
+    // Resolve profile_image:
+    // If undefined in body, retain existing. If null or '', clear it (set to null). Otherwise use string.
+    const resolvedProfileImage = profile_image !== undefined
+      ? (profile_image === '' || profile_image === null ? null : profile_image)
+      : existing.profile_image;
+
+    // Resolve status from employment_status if status not explicitly given
+    let resolvedStatus = status || existing.status;
+    if (employment_status && !status) {
+      resolvedStatus = employment_status.toLowerCase() === 'inactive' ? 'inactive' : 'active';
     }
 
     const update = db.transaction(() => {
       // Update core user
       db.prepare(`
         UPDATE users SET
-          name = COALESCE(?, name), email = COALESCE(?, email),
-          phone = COALESCE(?, phone), emp_or_mgr_id = COALESCE(?, emp_or_mgr_id),
-          department_id = COALESCE(?, department_id), manager_id = COALESCE(?, manager_id),
-          team_id = COALESCE(?, team_id), manager_type_id = COALESCE(?, manager_type_id),
-          joining_date = COALESCE(?, joining_date), status = COALESCE(?, status),
-          profile_image = COALESCE(?, profile_image), updated_at = CURRENT_TIMESTAMP
+          name = COALESCE(?, name),
+          email = COALESCE(?, email),
+          phone = COALESCE(?, phone),
+          emp_or_mgr_id = COALESCE(?, emp_or_mgr_id),
+          department_id = COALESCE(?, department_id),
+          manager_id = COALESCE(?, manager_id),
+          team_id = COALESCE(?, team_id),
+          manager_type_id = COALESCE(?, manager_type_id),
+          joining_date = COALESCE(?, joining_date),
+          status = COALESCE(?, status),
+          profile_image = ?,
+          updated_at = CURRENT_TIMESTAMP
         WHERE id = ?
       `).run(
         name ? name.trim() : null,
         email ? email.trim().toLowerCase() : null,
-        phone || null, emp_or_mgr_id ? emp_or_mgr_id.trim().toUpperCase() : null,
-        department_id || null, manager_id || null, team_id || null,
-        manager_type_id || null, joining_date || null, status || null,
-        profile_image || null, req.params.id
+        phone !== undefined ? (phone ? phone.trim() : null) : null,
+        emp_or_mgr_id ? emp_or_mgr_id.trim().toUpperCase() : null,
+        department_id !== undefined ? (department_id || null) : null,
+        manager_id !== undefined ? (manager_id || null) : null,
+        team_id !== undefined ? (team_id || null) : null,
+        manager_type_id !== undefined ? (manager_type_id || null) : null,
+        joining_date || null,
+        resolvedStatus,
+        resolvedProfileImage,
+        req.params.id
       );
 
       // Upsert extended profile
@@ -409,12 +452,39 @@ router.put('/:id', authenticateToken, requireAdmin, (req, res) => {
         req.params.id,
         date_of_birth || null, gender || null, father_name || null, mother_name || null,
         alt_phone || null, whatsapp_number || null, current_address || null, permanent_address || null,
-        city || null, state || null, pin_code || null, designation || null,
+        city || null, state || null, pin_code || null, designation !== undefined ? (designation ? designation.trim() : null) : null,
         employment_status || null, staff_type || null, reporting_manager_id || null
       );
 
+      // Handle Aadhaar KYC update if fields are supplied
+      if (aadhaar_number !== undefined || aadhaar_front_doc !== undefined || aadhaar_back_doc !== undefined) {
+        const existingKyc = db.prepare(`SELECT * FROM staff_kyc WHERE user_id = ?`).get(req.params.id);
+        const finalAadhaar = aadhaar_number !== undefined ? (aadhaar_number ? aadhaar_number.trim() : null) : (existingKyc ? existingKyc.aadhaar_number : null);
+        const finalFront = aadhaar_front_doc !== undefined ? (aadhaar_front_doc || null) : (existingKyc ? existingKyc.aadhaar_front_doc : null);
+        const finalBack = aadhaar_back_doc !== undefined ? (aadhaar_back_doc || null) : (existingKyc ? existingKyc.aadhaar_back_doc : null);
+        const kycStatus = (finalAadhaar && finalFront && finalBack) ? 'uploaded' : ((finalAadhaar || finalFront || finalBack) ? 'pending' : 'pending');
+
+        if (existingKyc) {
+          db.prepare(`
+            UPDATE staff_kyc SET
+              aadhaar_number = ?,
+              aadhaar_front_doc = ?,
+              aadhaar_back_doc = ?,
+              kyc_status = ?,
+              updated_at = CURRENT_TIMESTAMP
+            WHERE user_id = ?
+          `).run(finalAadhaar, finalFront, finalBack, kycStatus, req.params.id);
+        } else if (finalAadhaar || finalFront || finalBack) {
+          const kycId = 'kyc-' + uuidv4().slice(0, 8);
+          db.prepare(`
+            INSERT INTO staff_kyc (id, user_id, aadhaar_number, aadhaar_front_doc, aadhaar_back_doc, kyc_status)
+            VALUES (?, ?, ?, ?, ?, ?)
+          `).run(kycId, req.params.id, finalAadhaar, finalFront, finalBack, kycStatus);
+        }
+      }
+
       // Advocate details upsert if needed
-      if (registration_number !== undefined || bar_council_state !== undefined || specialization !== undefined) {
+      if (registration_number !== undefined || bar_council_state !== undefined || specialization !== undefined || years_experience !== undefined) {
         db.prepare(`
           INSERT INTO staff_advocate_details (user_id, registration_number, bar_council_state, specialization, years_experience, updated_at)
           VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
@@ -429,11 +499,24 @@ router.put('/:id', authenticateToken, requireAdmin, (req, res) => {
     });
 
     update();
+
+    // Live Sync to Supabase in background
+    try {
+      const updatedUser = db.prepare(`SELECT * FROM users WHERE id = ?`).get(req.params.id);
+      const updatedExt = db.prepare(`SELECT * FROM staff_extended_profiles WHERE user_id = ?`).get(req.params.id);
+      const updatedKyc = db.prepare(`SELECT * FROM staff_kyc WHERE user_id = ?`).get(req.params.id);
+      if (updatedUser) syncRecord('users', updatedUser).catch(e => console.warn('[Supabase users sync]', e.message));
+      if (updatedExt) syncRecord('staff_extended_profiles', updatedExt, 'user_id').catch(e => console.warn('[Supabase ext sync]', e.message));
+      if (updatedKyc) syncRecord('staff_kyc', updatedKyc).catch(e => console.warn('[Supabase kyc sync]', e.message));
+    } catch (syncErr) {
+      console.warn('[Supabase sync error]', syncErr.message);
+    }
+
     logAudit(req, 'Staff Updated', 'Staff', req.params.id, { name, email, department_id });
     res.json({ message: 'Staff profile updated successfully' });
   } catch (err) {
     console.error('Update staff error:', err);
-    res.status(500).json({ error: 'Failed to update staff profile' });
+    res.status(500).json({ error: err.message || 'Failed to update staff profile' });
   }
 });
 

@@ -144,8 +144,12 @@ export const ManagerTeamView: React.FC = () => {
             >
               <div className="flex items-start justify-between">
                 <div className="flex items-center space-x-3">
-                  <div className="h-10 w-10 rounded-full bg-[#15803d] text-white font-black text-sm flex items-center justify-center shadow-2xs">
-                    {emp.name?.charAt(0) || 'E'}
+                  <div className="h-10 w-10 rounded-full bg-[#15803d] text-white font-black text-sm flex items-center justify-center shadow-2xs overflow-hidden shrink-0">
+                    {emp.profile_image ? (
+                      <img src={emp.profile_image} alt={emp.name} className="h-full w-full object-cover" />
+                    ) : (
+                      emp.name?.charAt(0) || 'E'
+                    )}
                   </div>
                   <div>
                     <h4 className="text-sm font-bold text-slate-900 leading-tight">{emp.name}</h4>

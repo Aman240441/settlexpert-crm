@@ -84,8 +84,12 @@ export const AdminSettingsView: React.FC = () => {
       {/* Profile Card */}
       <div className="rounded-2xl bg-white border border-slate-200/80 p-6 shadow-xs space-y-6">
         <div className="flex items-center space-x-4 pb-4 border-b border-slate-100">
-          <div className="h-16 w-16 rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-600 text-white font-black text-2xl flex items-center justify-center shadow-md shadow-blue-500/20">
-            {user?.name?.charAt(0) || 'A'}
+          <div className="h-16 w-16 rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-600 text-white font-black text-2xl flex items-center justify-center shadow-md shadow-blue-500/20 overflow-hidden shrink-0">
+            {user?.profile_image ? (
+              <img src={user.profile_image} alt={user.name} className="h-full w-full object-cover" />
+            ) : (
+              user?.name?.charAt(0) || 'A'
+            )}
           </div>
           <div className="space-y-1">
             <div className="flex items-center space-x-2">

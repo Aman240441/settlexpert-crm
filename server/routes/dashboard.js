@@ -38,6 +38,7 @@ router.get('/stats', authenticateToken, requireAdmin, (req, res) => {
           u.name, 
           u.emp_or_mgr_id, 
           u.status,
+          u.profile_image,
           COALESCE(mt.name, 'General') as manager_type,
           COALESCE(d.name, 'Unassigned') as department_name,
           (SELECT COUNT(*) FROM users e WHERE e.manager_id = u.id AND e.role = 'employee') as employee_count,

@@ -161,7 +161,7 @@ router.get('/team', authenticateToken, requireManagerOrAdmin, (req, res) => {
     const scope = getManagerScope(req);
 
     let sql = `
-      SELECT u.id, u.name, u.email, u.phone, u.emp_or_mgr_id, u.status, u.joining_date, u.id_type,
+      SELECT u.id, u.name, u.email, u.phone, u.emp_or_mgr_id, u.status, u.joining_date, u.id_type, u.profile_image,
              d.name as department_name,
              (SELECT COUNT(*) FROM leads l WHERE l.employee_id = u.id) as leads_count,
              (SELECT COUNT(*) FROM clients c WHERE c.employee_id = u.id) as clients_count,

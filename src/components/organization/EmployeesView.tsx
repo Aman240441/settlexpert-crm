@@ -320,8 +320,12 @@ export const EmployeesView: React.FC = () => {
                   <tr key={emp.id} className="hover:bg-slate-50/80 transition-colors">
                     <td className="py-3.5 px-4">
                       <div className="flex items-center space-x-3">
-                        <div className="h-9 w-9 rounded-xl bg-indigo-100 text-indigo-700 font-bold flex items-center justify-center text-sm border border-indigo-200 shrink-0">
-                          {emp.name.charAt(0)}
+                        <div className="h-9 w-9 rounded-xl bg-indigo-100 text-indigo-700 font-bold flex items-center justify-center text-sm border border-indigo-200 shrink-0 overflow-hidden">
+                          {emp.profile_image ? (
+                            <img src={emp.profile_image} alt={emp.name} className="h-full w-full object-cover" />
+                          ) : (
+                            emp.name.charAt(0)
+                          )}
                         </div>
                         <div>
                           <p className="font-bold text-slate-900 tracking-tight">{emp.name}</p>
@@ -623,8 +627,12 @@ export const EmployeesView: React.FC = () => {
         {selectedEmployee && (
           <div className="space-y-6">
             <div className="p-5 rounded-2xl bg-slate-950 border border-slate-800 flex items-center space-x-4">
-              <div className="h-16 w-16 rounded-2xl bg-gradient-to-tr from-indigo-600 to-purple-600 text-white font-black text-2xl flex items-center justify-center shadow-lg">
-                {selectedEmployee.name.charAt(0)}
+              <div className="h-16 w-16 rounded-2xl bg-gradient-to-tr from-indigo-600 to-purple-600 text-white font-black text-2xl flex items-center justify-center shadow-lg overflow-hidden shrink-0">
+                {selectedEmployee.profile_image ? (
+                  <img src={selectedEmployee.profile_image} alt={selectedEmployee.name} className="h-full w-full object-cover" />
+                ) : (
+                  selectedEmployee.name.charAt(0)
+                )}
               </div>
               <div className="space-y-1">
                 <div className="flex items-center space-x-2">

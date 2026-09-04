@@ -17,10 +17,16 @@ import {
   Users,
   Briefcase,
   Layers,
-  AlertCircle
+  AlertCircle,
+  Camera,
+  Trash2,
+  Check,
+  X,
+  Upload,
+  Save
 } from 'lucide-react';
 import { api } from '../../services/api';
-import { StaffProfile as StaffProfileType } from '../../types';
+import { StaffProfile as StaffProfileType, Department } from '../../types';
 import { useAuth } from '../../context/AuthContext';
 import { AadhaarSection } from './AadhaarSection';
 import { Modal } from '../common/Modal';
@@ -39,8 +45,30 @@ export const StaffProfile: React.FC<StaffProfileProps> = ({ staffId, onBack, onO
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Edit Modal State
-  const [isEditOpen, setIsEditOpen] = useState(false);
+  // Edit State
+  const [isEditing, setIsEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [departments, setDepartments] = useState<Department[]>([]);
+  const [managerTypes, setManagerTypes] = useState<any[]>([]);
+
+  // Edit Form Fields
+  const [editForm, setEditForm] = useState({
+    name: '',
+    emp_or_mgr_id: '',
+    email: '',
+    phone: '',
+    department_id: '',
+    designation: '',
+    joining_date: '',
+    employment_status: 'Active',
+    manager_type_id: '',
+    profile_image: '',
+    aadhaar_number: '',
+    aadhaar_front_doc: null as string | null,
+    aadhaar_back_doc: null as string | null,
+  });
+
+  // Password Reset Modal State
   const [isResetPassOpen, setIsResetPassOpen] = useState(false);
   const [newPassword, setNewPassword] = useState('');
   const [actionLoading, setActionLoading] = useState(false);
@@ -60,6 +88,121 @@ export const StaffProfile: React.FC<StaffProfileProps> = ({ staffId, onBack, onO
       setError(err.message || 'Failed to load staff profile');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleStartEdit = async () => {
+    if (!staff) return;
+    try {
+      if (departments.length === 0 || managerTypes.length === 0) {
+        const [deptsRes, mtRes] = await Promise.all([
+          api.getDepartments().catch(() => ({ departments: [] })),
+          api.getManagerTypes().catch(() => ({ types: [] })),
+        ]);
+        setDepartments(deptsRes.departments || []);
+        const rawTypes = (mtRes as any).types || (mtRes as any).manager_types || [];
+        setManagerTypes(rawTypes);
+      }
+    } catch (e) {
+      console.warn('Dropdown prefetch error:', e);
+    }
+
+    let initialAadhaar = (staff as any).aadhaar_full || '';
+    if (!initialAadhaar && staff.aadhaar_masked) {
+      try {
+        const rev = await api.revealAadhaar(staff.id);
+        initialAadhaar = rev.aadhaar_number || '';
+      } catch (e) {}
+    }
+
+    setEditForm({
+      name: staff.name || '',
+      emp_or_mgr_id: staff.emp_or_mgr_id || '',
+      email: staff.email || '',
+      phone: staff.phone || '',
+      department_id: staff.department_id || '',
+      designation: staff.designation || '',
+      joining_date: staff.joining_date || '',
+      employment_status: staff.employment_status || (staff.status === 'active' ? 'Active' : 'Inactive'),
+      manager_type_id: staff.manager_type_id || '',
+      profile_image: staff.profile_image || '',
+      aadhaar_number: initialAadhaar,
+      aadhaar_front_doc: null,
+      aadhaar_back_doc: null,
+    });
+
+    setIsEditing(true);
+  };
+
+  const handleCancelEdit = () => {
+    setIsEditing(false);
+  };
+
+  const handleProfileImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) {
+      alert('Profile picture size exceeds 5MB limit');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      if (reader.result) {
+        setEditForm(prev => ({ ...prev, profile_image: reader.result as string }));
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleRemoveProfileImage = () => {
+    setEditForm(prev => ({ ...prev, profile_image: '' }));
+  };
+
+  const handleSaveEdit = async () => {
+    if (!staff) return;
+    if (!editForm.name.trim()) {
+      alert('Staff name is required');
+      return;
+    }
+    if (!editForm.email.trim()) {
+      alert('Email address is required');
+      return;
+    }
+
+    try {
+      setSaving(true);
+      const payload: any = {
+        name: editForm.name.trim(),
+        emp_or_mgr_id: editForm.emp_or_mgr_id.trim().toUpperCase(),
+        email: editForm.email.trim(),
+        phone: editForm.phone.trim(),
+        department_id: editForm.department_id || null,
+        designation: editForm.designation.trim(),
+        joining_date: editForm.joining_date || null,
+        employment_status: editForm.employment_status,
+        status: editForm.employment_status === 'Inactive' ? 'inactive' : 'active',
+        manager_type_id: editForm.manager_type_id || null,
+        profile_image: editForm.profile_image, // empty string clears in DB
+      };
+
+      if (editForm.aadhaar_number !== undefined) {
+        payload.aadhaar_number = editForm.aadhaar_number.replace(/\s/g, '');
+      }
+      if (editForm.aadhaar_front_doc !== null) {
+        payload.aadhaar_front_doc = editForm.aadhaar_front_doc;
+      }
+      if (editForm.aadhaar_back_doc !== null) {
+        payload.aadhaar_back_doc = editForm.aadhaar_back_doc;
+      }
+
+      await api.updateStaff(staff.id, payload);
+      // Immediately refresh and show updated info on this same page
+      await fetchProfile();
+      setIsEditing(false);
+    } catch (err: any) {
+      alert(`Failed to save changes: ${err.message || 'Unknown error'}`);
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -126,15 +269,15 @@ export const StaffProfile: React.FC<StaffProfileProps> = ({ staffId, onBack, onO
       {/* Top Bar Actions */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <button
-          onClick={onBack}
+          onClick={isEditing ? handleCancelEdit : onBack}
           className="inline-flex items-center gap-2 text-xs font-bold text-slate-600 hover:text-slate-900 bg-white border border-slate-200 px-3.5 py-2 rounded-xl hover:bg-slate-50 transition-colors shadow-2xs w-fit"
         >
           <ArrowLeft className="h-4 w-4" />
-          <span>Back to Staff Directory</span>
+          <span>{isEditing ? 'Cancel Edit' : 'Back to Staff Directory'}</span>
         </button>
 
         <div className="flex items-center gap-2">
-          {onOpenCRM && (
+          {onOpenCRM && !isEditing && (
             <button
               onClick={() => onOpenCRM(staff.role, staff)}
               className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-blue-50 border border-blue-200 text-blue-700 text-xs font-bold hover:bg-blue-100 transition-colors"
@@ -146,25 +289,68 @@ export const StaffProfile: React.FC<StaffProfileProps> = ({ staffId, onBack, onO
 
           {isAdmin && (
             <>
-              <button
-                onClick={() => setIsResetPassOpen(true)}
-                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-white border border-slate-200 text-slate-700 text-xs font-bold hover:bg-slate-50 transition-colors"
-              >
-                <KeyRound className="h-3.5 w-3.5 text-slate-500" />
-                <span>Reset Password</span>
-              </button>
+              {isEditing ? (
+                <>
+                  <button
+                    onClick={handleCancelEdit}
+                    disabled={saving}
+                    className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-white border border-slate-300 text-slate-700 text-xs font-bold hover:bg-slate-50 transition-colors shadow-2xs disabled:opacity-50"
+                  >
+                    <X className="h-3.5 w-3.5 text-slate-500" />
+                    <span>Cancel</span>
+                  </button>
 
-              <button
-                onClick={handleToggleStatus}
-                className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-colors border ${
-                  staff.status === 'active'
-                    ? 'bg-rose-50 border-rose-200 text-rose-700 hover:bg-rose-100'
-                    : 'bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100'
-                }`}
-              >
-                <Power className="h-3.5 w-3.5" />
-                <span>{staff.status === 'active' ? 'Deactivate' : 'Activate'}</span>
-              </button>
+                  <button
+                    id="save-changes-btn"
+                    onClick={handleSaveEdit}
+                    disabled={saving}
+                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition-all shadow-md shadow-emerald-600/20 disabled:opacity-50"
+                  >
+                    {saving ? (
+                      <>
+                        <div className="h-3.5 w-3.5 border-2 border-white border-t-transparent animate-spin rounded-full" />
+                        <span>Saving...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Check className="h-3.5 w-3.5" />
+                        <span>Save Changes</span>
+                      </>
+                    )}
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button
+                    id="edit-profile-btn"
+                    onClick={handleStartEdit}
+                    className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold transition-all shadow-md shadow-blue-600/20"
+                  >
+                    <Edit2 className="h-3.5 w-3.5" />
+                    <span>Edit Profile</span>
+                  </button>
+
+                  <button
+                    onClick={() => setIsResetPassOpen(true)}
+                    className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-white border border-slate-200 text-slate-700 text-xs font-bold hover:bg-slate-50 transition-colors"
+                  >
+                    <KeyRound className="h-3.5 w-3.5 text-slate-500" />
+                    <span>Reset Password</span>
+                  </button>
+
+                  <button
+                    onClick={handleToggleStatus}
+                    className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-colors border ${
+                      staff.status === 'active'
+                        ? 'bg-rose-50 border-rose-200 text-rose-700 hover:bg-rose-100'
+                        : 'bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100'
+                    }`}
+                  >
+                    <Power className="h-3.5 w-3.5" />
+                    <span>{staff.status === 'active' ? 'Deactivate' : 'Activate'}</span>
+                  </button>
+                </>
+              )}
             </>
           )}
         </div>
@@ -175,68 +361,146 @@ export const StaffProfile: React.FC<StaffProfileProps> = ({ staffId, onBack, onO
         <div className="flex flex-col md:flex-row items-start md:items-center gap-6">
           {/* Profile Photo */}
           <div className="relative">
-            <div className="h-24 w-24 sm:h-28 sm:w-28 rounded-2xl bg-gradient-to-br from-slate-100 to-slate-200 border-2 border-white shadow-md overflow-hidden flex items-center justify-center text-slate-400">
-              {staff.profile_image ? (
+            <div className="h-24 w-24 sm:h-28 sm:w-28 rounded-2xl bg-gradient-to-br from-slate-100 to-slate-200 border-2 border-white shadow-md overflow-hidden flex items-center justify-center text-slate-400 relative">
+              {isEditing ? (
+                editForm.profile_image ? (
+                  <img src={editForm.profile_image} alt={editForm.name || staff.name} className="h-full w-full object-cover" />
+                ) : (
+                  <User className="h-14 w-14 text-slate-400" />
+                )
+              ) : staff.profile_image ? (
                 <img src={staff.profile_image} alt={staff.name} className="h-full w-full object-cover" />
               ) : (
                 <User className="h-14 w-14 text-slate-400" />
               )}
+
+              {/* Edit Photo Overlay */}
+              {isEditing && (
+                <label
+                  className="absolute inset-0 bg-black/55 hover:bg-black/65 text-white flex flex-col items-center justify-center opacity-90 transition-opacity cursor-pointer text-center p-1"
+                  title="Upload or replace profile picture"
+                >
+                  <Camera className="h-5 w-5 mb-1 text-white" />
+                  <span className="text-[10px] font-bold text-white leading-tight">
+                    {editForm.profile_image ? 'Replace' : 'Upload'}
+                  </span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={handleProfileImageUpload}
+                  />
+                </label>
+              )}
             </div>
-            <span
-              className={`absolute -bottom-1 -right-1 h-5 w-5 rounded-full border-2 border-white ${
-                isStaffActive ? 'bg-emerald-500' : 'bg-slate-400'
-              }`}
-              title={isStaffActive ? 'Active' : 'Inactive'}
-            />
+
+            {/* Remove photo button in edit mode */}
+            {isEditing && editForm.profile_image && (
+              <button
+                type="button"
+                onClick={handleRemoveProfileImage}
+                title="Remove profile picture"
+                className="absolute -top-2 -right-2 h-6 w-6 bg-rose-600 hover:bg-rose-500 text-white rounded-full flex items-center justify-center shadow-md border-2 border-white transition-colors z-10"
+              >
+                <Trash2 className="h-3 w-3" />
+              </button>
+            )}
+
+            {!isEditing && (
+              <span
+                className={`absolute -bottom-1 -right-1 h-5 w-5 rounded-full border-2 border-white ${
+                  isStaffActive ? 'bg-emerald-500' : 'bg-slate-400'
+                }`}
+                title={isStaffActive ? 'Active' : 'Inactive'}
+              />
+            )}
           </div>
 
           {/* Details */}
           <div className="flex-1 space-y-2">
-            <div className="flex flex-wrap items-center gap-3">
-              <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
-                {staff.name}
-              </h1>
-              <span className="px-3 py-1 rounded-lg bg-slate-100 border border-slate-200 font-mono text-xs font-bold text-slate-700">
-                {staff.emp_or_mgr_id || 'ID: ' + staff.id}
-              </span>
-              <span
-                className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold ${
-                  isStaffActive
-                    ? 'bg-emerald-50 border border-emerald-200 text-emerald-700'
-                    : 'bg-slate-100 border border-slate-200 text-slate-600'
-                }`}
-              >
-                <CheckCircle2 className="h-3 w-3" />
-                {staff.employment_status || (isStaffActive ? 'Active Staff' : 'Inactive')}
-              </span>
-            </div>
+            {isEditing ? (
+              <div className="space-y-3">
+                <div className="flex flex-wrap items-center gap-3">
+                  <div className="flex-1 min-w-[200px]">
+                    <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
+                      Full Name
+                    </label>
+                    <input
+                      type="text"
+                      value={editForm.name}
+                      onChange={e => setEditForm({ ...editForm, name: e.target.value })}
+                      placeholder="Staff Full Name"
+                      className="w-full text-lg sm:text-xl font-bold text-slate-900 border border-slate-300 rounded-xl px-3 py-1.5 bg-white focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                    />
+                  </div>
 
-            <p className="text-sm font-semibold text-slate-600">
-              {staff.designation || 'Staff Member'} • <span className="text-blue-600">{staff.department_name || 'General Department'}</span>
-            </p>
+                  <div className="w-36">
+                    <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
+                      Staff ID
+                    </label>
+                    <input
+                      type="text"
+                      value={editForm.emp_or_mgr_id}
+                      onChange={e => setEditForm({ ...editForm, emp_or_mgr_id: e.target.value })}
+                      placeholder="EMP-XXXX"
+                      className="w-full font-mono text-xs font-bold text-slate-800 border border-slate-300 rounded-xl px-2.5 py-2 bg-white focus:ring-2 focus:ring-blue-500 focus:outline-none uppercase"
+                    />
+                  </div>
+                </div>
 
-            <div className="flex flex-wrap items-center gap-4 text-xs text-slate-500 pt-1">
-              <span className="flex items-center gap-1.5">
-                <Mail className="h-3.5 w-3.5 text-slate-400" />
-                {staff.email}
-              </span>
-              {staff.phone && (
-                <span className="flex items-center gap-1.5">
-                  <Phone className="h-3.5 w-3.5 text-slate-400" />
-                  {staff.phone}
-                </span>
-              )}
-              {staff.city && (
-                <span className="flex items-center gap-1.5">
-                  <MapPin className="h-3.5 w-3.5 text-slate-400" />
-                  {staff.city}
-                </span>
-              )}
-              <span className="flex items-center gap-1.5">
-                <Calendar className="h-3.5 w-3.5 text-slate-400" />
-                Joined {staff.joining_date || 'N/A'}
-              </span>
-            </div>
+                <p className="text-xs text-slate-500">
+                  You are editing this profile in real-time. Edit individual details in the cards below and click <strong className="text-emerald-700">Save Changes</strong>.
+                </p>
+              </div>
+            ) : (
+              <>
+                <div className="flex flex-wrap items-center gap-3">
+                  <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
+                    {staff.name}
+                  </h1>
+                  <span className="px-3 py-1 rounded-lg bg-slate-100 border border-slate-200 font-mono text-xs font-bold text-slate-700">
+                    {staff.emp_or_mgr_id || 'ID: ' + staff.id}
+                  </span>
+                  <span
+                    className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold ${
+                      isStaffActive
+                        ? 'bg-emerald-50 border border-emerald-200 text-emerald-700'
+                        : 'bg-slate-100 border border-slate-200 text-slate-600'
+                    }`}
+                  >
+                    <CheckCircle2 className="h-3 w-3" />
+                    {staff.employment_status || (isStaffActive ? 'Active Staff' : 'Inactive')}
+                  </span>
+                </div>
+
+                <p className="text-sm font-semibold text-slate-600">
+                  {staff.designation || 'Staff Member'} • <span className="text-blue-600">{staff.department_name || 'General Department'}</span>
+                </p>
+
+                <div className="flex flex-wrap items-center gap-4 text-xs text-slate-500 pt-1">
+                  <span className="flex items-center gap-1.5">
+                    <Mail className="h-3.5 w-3.5 text-slate-400" />
+                    {staff.email}
+                  </span>
+                  {staff.phone && (
+                    <span className="flex items-center gap-1.5">
+                      <Phone className="h-3.5 w-3.5 text-slate-400" />
+                      {staff.phone}
+                    </span>
+                  )}
+                  {staff.city && (
+                    <span className="flex items-center gap-1.5">
+                      <MapPin className="h-3.5 w-3.5 text-slate-400" />
+                      {staff.city}
+                    </span>
+                  )}
+                  <span className="flex items-center gap-1.5">
+                    <Calendar className="h-3.5 w-3.5 text-slate-400" />
+                    Joined {staff.joining_date || 'N/A'}
+                  </span>
+                </div>
+              </>
+            )}
           </div>
         </div>
       </div>
@@ -257,58 +521,150 @@ export const StaffProfile: React.FC<StaffProfileProps> = ({ staffId, onBack, onO
                 </div>
               </div>
               <span className="text-[11px] font-bold px-2.5 py-1 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20 uppercase tracking-wider">
-                {staff.staff_type || staff.role}
+                {isEditing ? 'Edit Mode Active' : staff.staff_type || staff.role}
               </span>
             </div>
 
             {/* Information Grid */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+              {/* Email Address */}
               <div className="space-y-1">
                 <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Email Address</span>
-                <p className="text-sm font-semibold text-white break-all">{staff.email}</p>
+                {isEditing ? (
+                  <input
+                    type="email"
+                    value={editForm.email}
+                    onChange={e => setEditForm({ ...editForm, email: e.target.value })}
+                    className="w-full text-sm font-semibold text-white bg-slate-800/90 border border-slate-700 rounded-xl px-3.5 py-2 focus:outline-none focus:border-blue-400"
+                    placeholder="email@example.com"
+                  />
+                ) : (
+                  <p className="text-sm font-semibold text-white break-all">{staff.email}</p>
+                )}
               </div>
 
+              {/* Contact Phone */}
               <div className="space-y-1">
                 <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Contact Phone</span>
-                <p className="text-sm font-semibold text-white">{staff.phone || '—'}</p>
+                {isEditing ? (
+                  <input
+                    type="text"
+                    value={editForm.phone}
+                    onChange={e => setEditForm({ ...editForm, phone: e.target.value })}
+                    className="w-full text-sm font-semibold text-white bg-slate-800/90 border border-slate-700 rounded-xl px-3.5 py-2 focus:outline-none focus:border-blue-400"
+                    placeholder="+91 98765 43210"
+                  />
+                ) : (
+                  <p className="text-sm font-semibold text-white">{staff.phone || '—'}</p>
+                )}
               </div>
 
+              {/* Department */}
               <div className="space-y-1">
                 <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Department</span>
-                <p className="text-sm font-semibold text-white">{staff.department_name || '—'} {staff.department_code ? `(${staff.department_code})` : ''}</p>
+                {isEditing ? (
+                  <select
+                    value={editForm.department_id}
+                    onChange={e => setEditForm({ ...editForm, department_id: e.target.value })}
+                    className="w-full text-sm font-semibold text-white bg-slate-800/90 border border-slate-700 rounded-xl px-3.5 py-2 focus:outline-none focus:border-blue-400"
+                  >
+                    <option value="" className="bg-slate-900 text-white">Select Department</option>
+                    {departments.map(d => (
+                      <option key={d.id} value={d.id} className="bg-slate-900 text-white">
+                        {d.name} {d.code ? `(${d.code})` : ''}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <p className="text-sm font-semibold text-white">{staff.department_name || '—'} {staff.department_code ? `(${staff.department_code})` : ''}</p>
+                )}
               </div>
 
+              {/* Designation */}
               <div className="space-y-1">
                 <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Designation</span>
-                <p className="text-sm font-semibold text-white">{staff.designation || 'Staff Member'}</p>
+                {isEditing ? (
+                  <input
+                    type="text"
+                    value={editForm.designation}
+                    onChange={e => setEditForm({ ...editForm, designation: e.target.value })}
+                    className="w-full text-sm font-semibold text-white bg-slate-800/90 border border-slate-700 rounded-xl px-3.5 py-2 focus:outline-none focus:border-blue-400"
+                    placeholder="e.g. Senior Debt Specialist"
+                  />
+                ) : (
+                  <p className="text-sm font-semibold text-white">{staff.designation || 'Staff Member'}</p>
+                )}
               </div>
 
+              {/* Joining Date */}
               <div className="space-y-1">
                 <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Joining Date</span>
-                <p className="text-sm font-semibold text-white">{staff.joining_date || '—'}</p>
+                {isEditing ? (
+                  <input
+                    type="date"
+                    value={editForm.joining_date}
+                    onChange={e => setEditForm({ ...editForm, joining_date: e.target.value })}
+                    className="w-full text-sm font-semibold text-white bg-slate-800/90 border border-slate-700 rounded-xl px-3.5 py-2 focus:outline-none focus:border-blue-400"
+                  />
+                ) : (
+                  <p className="text-sm font-semibold text-white">{staff.joining_date || '—'}</p>
+                )}
               </div>
 
+              {/* Employment Status */}
               <div className="space-y-1">
                 <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Employment Status</span>
-                <p className="text-sm font-semibold text-emerald-400">{staff.employment_status || staff.status || 'Active'}</p>
+                {isEditing ? (
+                  <select
+                    value={editForm.employment_status}
+                    onChange={e => setEditForm({ ...editForm, employment_status: e.target.value })}
+                    className="w-full text-sm font-semibold text-emerald-400 bg-slate-800/90 border border-slate-700 rounded-xl px-3.5 py-2 focus:outline-none focus:border-blue-400"
+                  >
+                    <option value="Active" className="bg-slate-900 text-emerald-400">Active</option>
+                    <option value="Probation" className="bg-slate-900 text-amber-400">Probation</option>
+                    <option value="Notice Period" className="bg-slate-900 text-orange-400">Notice Period</option>
+                    <option value="Inactive" className="bg-slate-900 text-rose-400">Inactive</option>
+                  </select>
+                ) : (
+                  <p className="text-sm font-semibold text-emerald-400">{staff.employment_status || staff.status || 'Active'}</p>
+                )}
               </div>
 
-              {staff.reporting_manager_name && (
+              {/* Reporting Manager (Display) */}
+              {staff.reporting_manager_name && !isEditing && (
                 <div className="space-y-1">
                   <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Reporting Manager</span>
                   <p className="text-sm font-semibold text-white">{staff.reporting_manager_name}</p>
                 </div>
               )}
 
-              {staff.manager_type_name && (
+              {/* Manager Type (Editable if manager role or in edit mode) */}
+              {(staff.role === 'manager' || staff.manager_type_name || isEditing) && (
                 <div className="space-y-1">
                   <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Manager Type</span>
-                  <p className="text-sm font-semibold text-white">{staff.manager_type_name} ({staff.manager_type_code})</p>
+                  {isEditing ? (
+                    <select
+                      value={editForm.manager_type_id}
+                      onChange={e => setEditForm({ ...editForm, manager_type_id: e.target.value })}
+                      className="w-full text-sm font-semibold text-white bg-slate-800/90 border border-slate-700 rounded-xl px-3.5 py-2 focus:outline-none focus:border-blue-400"
+                    >
+                      <option value="" className="bg-slate-900 text-white">General / None</option>
+                      {managerTypes.map(mt => (
+                        <option key={mt.id} value={mt.id} className="bg-slate-900 text-white">
+                          {mt.name} ({mt.code})
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <p className="text-sm font-semibold text-white">
+                      {staff.manager_type_name ? `${staff.manager_type_name} (${staff.manager_type_code})` : '—'}
+                    </p>
+                  )}
                 </div>
               )}
             </div>
 
-            {/* Extended Personal Details */}
+            {/* Extended Personal Details (Non-edit read only) */}
             {(staff.date_of_birth || staff.father_name || staff.mother_name || staff.gender) && (
               <div className="border-t border-slate-800 pt-6 space-y-4">
                 <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400">Personal Details</h3>
@@ -341,7 +697,7 @@ export const StaffProfile: React.FC<StaffProfileProps> = ({ staffId, onBack, onO
               </div>
             )}
 
-            {/* Address */}
+            {/* Address Details */}
             {(staff.current_address || staff.permanent_address || staff.city || staff.state) && (
               <div className="border-t border-slate-800 pt-6 space-y-3">
                 <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400">Address Details</h3>
@@ -397,9 +753,17 @@ export const StaffProfile: React.FC<StaffProfileProps> = ({ staffId, onBack, onO
           <AadhaarSection
             staffId={staff.id}
             maskedAadhaar={staff.aadhaar_masked}
+            fullAadhaarInitial={(staff as any).aadhaar_full}
             kycStatus={staff.kyc_status || staff.kyc_meta?.kyc_status || 'pending'}
             hasFront={staff.kyc_meta ? staff.kyc_meta.has_front : false}
             hasBack={staff.kyc_meta ? staff.kyc_meta.has_back : false}
+            isEditing={isEditing}
+            editAadhaarNumber={editForm.aadhaar_number}
+            editFrontDoc={editForm.aadhaar_front_doc}
+            editBackDoc={editForm.aadhaar_back_doc}
+            onAadhaarNumberChange={(num) => setEditForm(prev => ({ ...prev, aadhaar_number: num }))}
+            onFrontDocChange={(doc) => setEditForm(prev => ({ ...prev, aadhaar_front_doc: doc }))}
+            onBackDocChange={(doc) => setEditForm(prev => ({ ...prev, aadhaar_back_doc: doc }))}
           />
         </div>
       </div>
@@ -444,4 +808,3 @@ export const StaffProfile: React.FC<StaffProfileProps> = ({ staffId, onBack, onO
     </div>
   );
 };
-

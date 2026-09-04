@@ -1691,8 +1691,12 @@ export const LeadImportDistributionView: React.FC<LeadImportDistributionViewProp
                         </td>
                         <td className="py-3.5 px-4">
                           <div className="flex items-center space-x-3">
-                            <div className="h-8 w-8 rounded-xl bg-slate-900 text-white font-bold flex items-center justify-center text-xs">
-                              {emp.name.charAt(0)}
+                            <div className="h-8 w-8 rounded-xl bg-slate-900 text-white font-bold flex items-center justify-center text-xs overflow-hidden shrink-0">
+                              {emp.profile_image ? (
+                                <img src={emp.profile_image} alt={emp.name} className="h-full w-full object-cover" />
+                              ) : (
+                                emp.name.charAt(0)
+                              )}
                             </div>
                             <div>
                               <p className="font-bold text-slate-900">{emp.name}</p>
@@ -1852,8 +1856,12 @@ export const LeadImportDistributionView: React.FC<LeadImportDistributionViewProp
             {employeesWorkload.map(emp => (
               <div key={emp.id} className="bg-white p-5 rounded-3xl border border-slate-200 shadow-2xs space-y-4">
                 <div className="flex items-center space-x-3 border-b border-slate-100 pb-3">
-                  <div className="h-10 w-10 rounded-2xl bg-slate-900 text-white font-bold flex items-center justify-center text-sm">
-                    {emp.name.charAt(0)}
+                  <div className="h-10 w-10 rounded-2xl bg-slate-900 text-white font-bold flex items-center justify-center text-sm overflow-hidden shrink-0">
+                    {emp.profile_image ? (
+                      <img src={emp.profile_image} alt={emp.name} className="h-full w-full object-cover" />
+                    ) : (
+                      emp.name.charAt(0)
+                    )}
                   </div>
                   <div>
                     <h3 className="text-sm font-bold text-slate-900">{emp.name}</h3>

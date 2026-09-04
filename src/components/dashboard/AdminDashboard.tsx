@@ -301,8 +301,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
                   <tr key={mgr.id} className="hover:bg-slate-50/80 transition-colors">
                     <td className="py-3.5 px-4">
                       <div className="flex items-center space-x-3">
-                        <div className="h-8 w-8 rounded-xl bg-blue-100 text-blue-700 font-bold flex items-center justify-center text-xs">
-                          {mgr.name.charAt(0)}
+                        <div className="h-8 w-8 rounded-xl bg-blue-100 text-blue-700 font-bold flex items-center justify-center text-xs overflow-hidden shrink-0">
+                          {mgr.profile_image ? (
+                            <img src={mgr.profile_image} alt={mgr.name} className="h-full w-full object-cover" />
+                          ) : (
+                            mgr.name.charAt(0)
+                          )}
                         </div>
                         <div>
                           <p className="font-bold text-slate-900">{mgr.name}</p>

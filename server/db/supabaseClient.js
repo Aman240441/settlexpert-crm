@@ -24,13 +24,13 @@ if (SUPABASE_URL && SUPABASE_SECRET_KEY && !SUPABASE_SECRET_KEY.includes('PASTE_
 /**
  * Live Sync a record or array of records directly to Supabase in real-time
  */
-async function syncRecord(table, recordOrRecords) {
+async function syncRecord(table, recordOrRecords, onConflict = 'id') {
   if (!supabase || !recordOrRecords) return;
   try {
     const payload = Array.isArray(recordOrRecords) ? recordOrRecords : [recordOrRecords];
     if (payload.length === 0) return;
 
-    const { error } = await supabase.from(table).upsert(payload, { onConflict: 'id' });
+    const { error } = await supabase.from(table).upsert(payload, { onConflict });
     if (error) {
       console.warn(`[Supabase Live Sync] Notice on '${table}':`, error.message);
     } else {

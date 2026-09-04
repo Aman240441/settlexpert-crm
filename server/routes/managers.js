@@ -77,7 +77,7 @@ router.get('/:id', authenticateToken, requireAdmin, (req, res) => {
     }
 
     const permissions = db.prepare(`SELECT * FROM user_permissions WHERE user_id = ?`).all(req.params.id);
-    const assignedEmployees = db.prepare(`SELECT id, name, email, phone, emp_or_mgr_id, status FROM users WHERE manager_id = ? AND role = 'employee'`).all(req.params.id);
+    const assignedEmployees = db.prepare(`SELECT id, name, email, phone, emp_or_mgr_id, status, profile_image FROM users WHERE manager_id = ? AND role = 'employee'`).all(req.params.id);
 
     res.json({ manager, permissions, assignedEmployees });
   } catch (err) {

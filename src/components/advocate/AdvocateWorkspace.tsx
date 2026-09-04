@@ -259,8 +259,12 @@ export const AdvocateWorkspace: React.FC<AdvocateWorkspaceProps> = ({ onSwitchTo
                 aria-label="Advocate profile menu"
                 aria-expanded={showProfileMenu}
               >
-                <div className="h-8 w-8 rounded-full bg-[#15803d] text-white flex items-center justify-center font-bold text-xs shadow-xs">
-                  {user?.name ? user.name.charAt(0) : 'A'}
+                <div className="h-8 w-8 rounded-full bg-[#15803d] text-white flex items-center justify-center font-bold text-xs shadow-xs overflow-hidden shrink-0">
+                  {user?.profile_image ? (
+                    <img src={user.profile_image} alt={user.name} className="h-full w-full object-cover" />
+                  ) : (
+                    user?.name ? user.name.charAt(0) : 'A'
+                  )}
                 </div>
                 <span className="text-xs font-bold text-slate-800 hidden md:block">
                   {user?.name || 'Advocate'}
