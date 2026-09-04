@@ -2567,6 +2567,19 @@ router.post('/wipe-data', authenticateToken, requireAdmin, async (req, res) => {
   }
 });
 
+// POST /api/crm/wipe-staff - Admin endpoint to delete all non-admin users (managers + employees)
+router.post('/wipe-staff', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const { wipeAllStaff } = require('../scripts/wipe_all_data');
+    await wipeAllStaff();
+    logAudit(req, 'RESET', 'System', 'USERS', 'Wiped all manager and employee accounts');
+    res.json({ success: true, message: 'All managers and employees deleted. Only Admin account remains.' });
+  } catch (err) {
+    console.error('Wipe staff error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // BUILD: 2026-09-04T07:54:13.516Z
 
 module.exports = router;

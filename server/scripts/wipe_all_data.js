@@ -86,8 +86,57 @@ async function wipeAllData() {
   console.log('================================================================\n');
 }
 
-if (require.main === module) {
-  wipeAllData();
+async function wipeAllStaff() {
+  console.log('================================================================');
+  console.log(' WIPING ALL STAFF (Managers & Employees) FROM LOCAL & SUPABASE');
+  console.log('================================================================');
+
+  // Wipe from local SQLite
+  console.log('\n[1/2] Wiping staff from local SQLite...');
+  const localTx = db.transaction(() => {
+    db.pragma('foreign_keys = OFF');
+    // Remove all non-admin users
+    db.prepare("DELETE FROM users WHERE role != 'admin'").run();
+    db.pragma('foreign_keys = ON');
+  });
+  localTx();
+  console.log(' ✔ Local SQLite: All managers & employees deleted.');
+
+  // Wipe from Supabase
+  if (!supabase) {
+    console.error(' ❌ Supabase client not initialized.');
+    return;
+  }
+  console.log('\n[2/2] Wiping staff from Supabase...');
+  try {
+    const { data, error } = await supabase
+      .from('users')
+      .delete()
+      .neq('role', 'admin')
+      .select('id, name, role');
+    if (error) {
+      console.warn(' ⚠️ Supabase notice:', error.message);
+    } else {
+      console.log(` ✔ Supabase: Deleted ${data?.length || 0} staff user(s).`);
+      data?.forEach(u => console.log(`   - ${u.role}: ${u.name}`));
+    }
+  } catch (e) {
+    console.warn(' ⚠️ Exception wiping staff from Supabase:', e.message);
+  }
+
+  console.log('\n================================================================');
+  console.log(' ALL STAFF WIPED! Only Admin account remains.');
+  console.log('================================================================\n');
 }
 
-module.exports = { wipeAllData };
+if (require.main === module) {
+  // Check CLI arg: node wipe_all_data.js --staff to wipe staff too
+  const args = process.argv.slice(2);
+  if (args.includes('--staff')) {
+    wipeAllStaff();
+  } else {
+    wipeAllData();
+  }
+}
+
+module.exports = { wipeAllData, wipeAllStaff };
